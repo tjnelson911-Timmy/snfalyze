@@ -1,0 +1,12 @@
+{
+  "name": "snfalyze",
+  "version": "1.0.0",
+  "description": "SNFalyze Deal Tracker - Skilled Nursing Facility Deal Management",
+  "scripts": {
+    "dev": "concurrently \"cd backend && uvicorn app.main:app --reload --port 8000\" \"cd frontend && npm run dev\"",
+    "build": "cd frontend && npm run build && mkdir -p ../backend/static && cp -r dist/* ../backend/static/",
+    "start": "cd backend && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"
+  },
+  "keywords": ["healthcare", "deals", "snf", "nursing-facility"],
+  "license": "MIT"
+}
