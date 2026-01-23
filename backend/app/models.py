@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Text, DateTime, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, Float, Text, DateTime, ForeignKey, Boolean, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .database import Base
@@ -26,6 +26,7 @@ class Deal(Base):
     source = Column(String(255))
     notes = Column(Text)
     investment_thesis = Column(Text)
+    custom_categories = Column(JSON, default=list)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     stage_changed_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -49,6 +50,8 @@ class Property(Base):
     ebitdar = Column(Float)
     allocated_value = Column(Float)
     price_per_bed = Column(Float)
+    latitude = Column(Float)
+    longitude = Column(Float)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     deal = relationship("Deal", back_populates="properties")
     documents = relationship("Document", back_populates="property")
@@ -90,3 +93,19 @@ class Task(Base):
     completed_at = Column(DateTime)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     deal = relationship("Deal", back_populates="tasks")
+
+class CurrentOperation(Base):
+    __tablename__ = "current_operations"
+    id = Column(Integer, primary_key=True, index=True)
+    company = Column(String(255), nullable=False)
+    team = Column(String(255))
+    property_name = Column(String(255))
+    property_type = Column(String(50))
+    address = Column(String(255))
+    city = Column(String(100))
+    state = Column(String(50))
+    beds = Column(Integer)
+    notes = Column(Text)
+    latitude = Column(Float)
+    longitude = Column(Float)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

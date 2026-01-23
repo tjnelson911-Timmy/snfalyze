@@ -45,6 +45,7 @@ class DealResponse(DealBase):
     estimated_value: Optional[float] = None
     price_per_bed: Optional[float] = None
     property_count: int = 1
+    custom_categories: Optional[List[dict]] = []
     created_at: datetime
     updated_at: Optional[datetime] = None
     document_count: Optional[int] = 0
@@ -69,6 +70,8 @@ class PropertyResponse(PropertyBase):
     id: int
     deal_id: int
     price_per_bed: Optional[float] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     created_at: datetime
     class Config: from_attributes = True
 

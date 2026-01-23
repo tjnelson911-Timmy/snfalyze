@@ -14,13 +14,15 @@ def get_deals(db: Session, status=None, search=None, skip=0, limit=100):
     return deals
 
 def get_deal_stats(db: Session):
-    stats = {"vetting": 0, "pipeline": 0, "due_diligence": 0, "current_operations": 0, "on_hold": 0, "total": 0, "total_value": 0, "total_beds": 0}
+    stats = {"vetting": 0, "pipeline": 0, "due_diligence": 0, "current_operations": 0, "on_hold": 0, "total": 0, "total_value": 0, "total_beds": 0, "total_properties": 0}
     for r in db.query(models.Deal.status, func.count(models.Deal.id), func.sum(models.Deal.asking_price), func.sum(models.Deal.total_beds)).group_by(models.Deal.status).all():
         if r[0] in stats:
             stats[r[0]] = r[1]
             stats["total"] += r[1]
             if r[2]: stats["total_value"] += r[2]
             if r[3]: stats["total_beds"] += r[3]
+    # Count total properties across all deals
+    stats["total_properties"] = db.query(func.count(models.Property.id)).scalar() or 0
     return stats
 
 def get_deal(db: Session, deal_id: int):
