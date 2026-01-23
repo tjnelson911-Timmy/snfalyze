@@ -46,6 +46,34 @@ def get_deals(status: Optional[str] = None, search: Optional[str] = None, db: Se
 def get_stats(db: Session = Depends(get_db)):
     return crud.get_deal_stats(db)
 
+@app.get("/api/deals/map")
+def get_deals_for_map(db: Session = Depends(get_db)):
+    """Get all deals with their properties for map display"""
+    deals = db.query(models.Deal).all()
+    result = []
+    for deal in deals:
+        props = []
+        for p in deal.properties:
+            if p.latitude and p.longitude:
+                props.append({
+                    "id": p.id,
+                    "name": p.name,
+                    "address": p.address,
+                    "city": p.city,
+                    "state": p.state,
+                    "licensed_beds": p.licensed_beds,
+                    "latitude": p.latitude,
+                    "longitude": p.longitude
+                })
+        if props:  # Only include deals that have geocoded properties
+            result.append({
+                "id": deal.id,
+                "name": deal.name,
+                "status": deal.status,
+                "properties": props
+            })
+    return result
+
 @app.get("/api/deals/{deal_id}", response_model=schemas.DealDetailResponse)
 def get_deal(deal_id: int, db: Session = Depends(get_db)):
     deal = crud.get_deal(db, deal_id)

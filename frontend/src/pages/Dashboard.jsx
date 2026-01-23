@@ -27,6 +27,7 @@ const STATUSES = [
 
 function Dashboard() {
   const [deals, setDeals] = useState([])
+  const [mapDeals, setMapDeals] = useState([])
   const [stats, setStats] = useState({})
   const [currentOps, setCurrentOps] = useState({ companies: [], total: 0 })
   const [expandedCompanies, setExpandedCompanies] = useState(new Set())
@@ -34,7 +35,7 @@ function Dashboard() {
   const [error, setError] = useState(null)
   const [draggedDeal, setDraggedDeal] = useState(null)
   const [dragOverColumn, setDragOverColumn] = useState(null)
-  const [mapFilters, setMapFilters] = useState({ showAll: true, companies: {}, deals: true })
+  const [mapFilters, setMapFilters] = useState({ showAll: true, companies: {}, deals: {} })
   const navigate = useNavigate()
 
   useEffect(() => { loadData() }, [])
@@ -43,18 +44,22 @@ function Dashboard() {
     try {
       setLoading(true)
       setError(null)
-      const [d, s, ops] = await Promise.all([
+      const [d, s, ops, md] = await Promise.all([
         getDeals(),
         getDealStats(),
-        api.get('/current-operations').then(r => r.data).catch(() => ({ companies: [], total: 0 }))
+        api.get('/current-operations').then(r => r.data).catch(() => ({ companies: [], total: 0 })),
+        api.get('/deals/map').then(r => r.data).catch(() => [])
       ])
       setDeals(d)
       setStats(s)
       setCurrentOps(ops)
-      // Initialize map filters for companies
+      setMapDeals(md)
+      // Initialize map filters for companies and deals
       const companyFilters = {}
       ops.companies?.forEach(c => { companyFilters[c.company] = true })
-      setMapFilters(prev => ({ ...prev, companies: companyFilters }))
+      const dealFilters = {}
+      md.forEach(deal => { dealFilters[deal.id] = true })
+      setMapFilters(prev => ({ ...prev, companies: companyFilters, deals: dealFilters }))
     } catch (e) {
       setError('Failed to load data. Is the backend running?')
     } finally {
@@ -75,15 +80,19 @@ function Dashboard() {
       const newShowAll = !mapFilters.showAll
       const newCompanies = {}
       Object.keys(mapFilters.companies).forEach(c => { newCompanies[c] = newShowAll })
-      setMapFilters({ showAll: newShowAll, companies: newCompanies, deals: newShowAll })
+      const newDeals = {}
+      Object.keys(mapFilters.deals).forEach(d => { newDeals[d] = newShowAll })
+      setMapFilters({ showAll: newShowAll, companies: newCompanies, deals: newDeals })
     } else if (type === 'company') {
       const newCompanies = { ...mapFilters.companies, [key]: !mapFilters.companies[key] }
-      const allOn = Object.values(newCompanies).every(v => v) && mapFilters.deals
-      setMapFilters({ ...mapFilters, companies: newCompanies, showAll: allOn })
-    } else if (type === 'deals') {
-      const newDeals = !mapFilters.deals
-      const allOn = Object.values(mapFilters.companies).every(v => v) && newDeals
-      setMapFilters({ ...mapFilters, deals: newDeals, showAll: allOn })
+      const allCompaniesOn = Object.values(newCompanies).every(v => v)
+      const allDealsOn = Object.values(mapFilters.deals).every(v => v)
+      setMapFilters({ ...mapFilters, companies: newCompanies, showAll: allCompaniesOn && allDealsOn })
+    } else if (type === 'deal') {
+      const newDeals = { ...mapFilters.deals, [key]: !mapFilters.deals[key] }
+      const allCompaniesOn = Object.values(mapFilters.companies).every(v => v)
+      const allDealsOn = Object.values(newDeals).every(v => v)
+      setMapFilters({ ...mapFilters, deals: newDeals, showAll: allCompaniesOn && allDealsOn })
     }
   }
 
@@ -117,16 +126,17 @@ function Dashboard() {
     })
 
     // Add deal property markers
-    if (mapFilters.deals) {
-      deals.forEach(deal => {
-        deal.properties?.forEach(prop => {
-          if (prop.latitude && prop.longitude) {
-            markers.push({
+    mapDeals.forEach(deal => {
+      if (!mapFilters.deals[deal.id]) return
+      deal.properties?.forEach(prop => {
+        if (prop.latitude && prop.longitude) {
+          markers.push({
               id: `deal-${deal.id}-${prop.id}`,
               position: [prop.latitude, prop.longitude],
               name: prop.name || deal.name,
-              company: 'Deal: ' + deal.name,
+              company: deal.name,
               type: 'deal',
+              status: deal.status,
               color: DEAL_COLOR,
               beds: prop.licensed_beds,
               address: prop.address,
@@ -136,10 +146,9 @@ function Dashboard() {
           }
         })
       })
-    }
 
     return markers
-  }, [currentOps, deals, mapFilters])
+  }, [currentOps, mapDeals, mapFilters])
 
   // Drag handlers for deals
   const handleDragStart = (e, deal) => {
@@ -573,28 +582,35 @@ function Dashboard() {
 
           {/* Deals filter */}
           <div style={{ fontSize: 11, color: '#64748b', marginTop: 12, marginBottom: 6, fontWeight: 600 }}>PIPELINE DEALS</div>
-          <div
-            onClick={() => toggleMapFilter('deals')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '6px 0',
-              cursor: 'pointer',
-              opacity: mapFilters.deals ? 1 : 0.5
-            }}
-          >
-            <div style={{
-              width: 12,
-              height: 12,
-              borderRadius: '50%',
-              background: DEAL_COLOR,
-              border: '2px solid white',
-              boxShadow: '0 0 0 1px ' + DEAL_COLOR
-            }} />
-            <span style={{ fontSize: 12 }}>Deal Properties</span>
-            {mapFilters.deals ? <Eye size={12} color="#0b7280" /> : <EyeOff size={12} color="#a3a3a3" />}
-          </div>
+          {mapDeals.map(deal => (
+            <div
+              key={deal.id}
+              onClick={() => toggleMapFilter('deal', deal.id)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '6px 0',
+                cursor: 'pointer',
+                opacity: mapFilters.deals[deal.id] ? 1 : 0.5
+              }}
+            >
+              <div style={{
+                width: 12,
+                height: 12,
+                borderRadius: '50%',
+                background: DEAL_COLOR,
+                border: '2px solid white',
+                boxShadow: '0 0 0 1px ' + DEAL_COLOR
+              }} />
+              <span style={{ fontSize: 12 }}>{deal.name}</span>
+              <span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'capitalize' }}>({deal.status.replace('_', ' ')})</span>
+              {mapFilters.deals[deal.id] ? <Eye size={12} color="#0b7280" /> : <EyeOff size={12} color="#a3a3a3" />}
+            </div>
+          ))}
+          {mapDeals.length === 0 && (
+            <div style={{ fontSize: 11, color: '#a3a3a3', padding: '6px 0' }}>No geocoded deals</div>
+          )}
 
           <div style={{ marginTop: 12, fontSize: 11, color: '#94a3b8' }}>
             {mapMarkers.length} locations shown
