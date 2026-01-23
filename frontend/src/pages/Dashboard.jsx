@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { Plus, Building2, TrendingUp, RefreshCw, ChevronDown, ChevronRight, Users, Upload, MapPin, Eye, EyeOff } from 'lucide-react'
+import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet'
 import { getDeals, getDealStats, updateDealStatus, formatCurrency, formatNumber } from '../services/api'
 import api from '../services/api'
-import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet'
-import 'leaflet/dist/leaflet.css'
 
-// Company colors
+// Company colors for map markers
 const COMPANY_COLORS = {
   'Columbia': '#e11d48',
   'Envision': '#7c3aed',
@@ -32,10 +31,10 @@ function Dashboard() {
   const [currentOps, setCurrentOps] = useState({ companies: [], total: 0 })
   const [expandedCompanies, setExpandedCompanies] = useState(new Set())
   const [loading, setLoading] = useState(true)
-  const [mapFilters, setMapFilters] = useState({ showAll: true, companies: {}, deals: true })
   const [error, setError] = useState(null)
   const [draggedDeal, setDraggedDeal] = useState(null)
   const [dragOverColumn, setDragOverColumn] = useState(null)
+  const [mapFilters, setMapFilters] = useState({ showAll: true, companies: {}, deals: true })
   const navigate = useNavigate()
 
   useEffect(() => { loadData() }, [])
@@ -52,7 +51,7 @@ function Dashboard() {
       setDeals(d)
       setStats(s)
       setCurrentOps(ops)
-      // Initialize map filters with all companies visible
+      // Initialize map filters for companies
       const companyFilters = {}
       ops.companies?.forEach(c => { companyFilters[c.company] = true })
       setMapFilters(prev => ({ ...prev, companies: companyFilters }))
@@ -88,7 +87,7 @@ function Dashboard() {
     }
   }
 
-  // Compute map markers
+  // Compute map markers from current operations and deals
   const mapMarkers = useMemo(() => {
     const markers = []
 
@@ -99,7 +98,6 @@ function Dashboard() {
 
       Object.values(company.teams).forEach(properties => {
         properties.forEach(prop => {
-          // Use actual coordinates if available
           if (prop.latitude && prop.longitude) {
             markers.push({
               id: `op-${prop.id}`,
@@ -118,7 +116,7 @@ function Dashboard() {
       })
     })
 
-    // Add deal markers
+    // Add deal property markers
     if (mapFilters.deals) {
       deals.forEach(deal => {
         deal.properties?.forEach(prop => {
@@ -479,143 +477,131 @@ function Dashboard() {
       </div>
 
       {/* Map Section */}
-      <div style={{ marginTop: 24 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16, color: '#171717' }}>
-          <MapPin size={20} style={{ display: 'inline', marginRight: 8, verticalAlign: 'middle' }} />
-          Facility Locations
-        </h2>
+      <div style={{ marginTop: 24, display: 'flex', gap: 16 }}>
+        {/* Map */}
+        <div className="card" style={{ flex: 1, padding: 0, overflow: 'hidden', height: 450 }}>
+          <MapContainer
+            center={[39.8283, -98.5795]}
+            zoom={4}
+            style={{ height: '100%', width: '100%' }}
+            scrollWheelZoom={true}
+          >
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            {mapMarkers.map(marker => (
+              <CircleMarker
+                key={marker.id}
+                center={marker.position}
+                radius={8}
+                fillColor={marker.color}
+                color="#fff"
+                weight={2}
+                opacity={1}
+                fillOpacity={0.8}
+              >
+                <Popup>
+                  <div style={{ minWidth: 150 }}>
+                    <div style={{ fontWeight: 600, marginBottom: 4 }}>{marker.name}</div>
+                    <div style={{ fontSize: 12, color: '#64748b' }}>{marker.company}</div>
+                    {marker.beds && <div style={{ fontSize: 12, marginTop: 4 }}>{marker.beds} beds</div>}
+                    {marker.address && (
+                      <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+                        {marker.address}<br />
+                        {marker.city}, {marker.state}
+                      </div>
+                    )}
+                  </div>
+                </Popup>
+              </CircleMarker>
+            ))}
+          </MapContainer>
+        </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 240px', gap: 16 }}>
-          {/* Map */}
-          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-            <MapContainer
-              center={[39.8283, -98.5795]}
-              zoom={4}
-              style={{ width: '100%', height: 450 }}
-              scrollWheelZoom={true}
-            >
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-              {mapMarkers.map(marker => (
-                <CircleMarker
-                  key={marker.id}
-                  center={marker.position}
-                  radius={8}
-                  pathOptions={{
-                    fillColor: marker.color,
-                    fillOpacity: 0.8,
-                    color: '#fff',
-                    weight: 2
-                  }}
-                >
-                  <Popup>
-                    <div style={{ minWidth: 150 }}>
-                      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>{marker.name}</div>
-                      <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{marker.company}</div>
-                      {marker.address && <div style={{ fontSize: 11, color: '#9ca3af' }}>{marker.address}</div>}
-                      <div style={{ fontSize: 11, color: '#9ca3af' }}>{marker.city}, {marker.state}</div>
-                      {marker.beds && <div style={{ fontSize: 12, marginTop: 4, fontWeight: 500 }}>{marker.beds} beds</div>}
-                    </div>
-                  </Popup>
-                </CircleMarker>
-              ))}
-            </MapContainer>
-            <div style={{ padding: '8px 16px', background: '#f9fafb', borderTop: '1px solid #e5e5e5', fontSize: 12, color: '#6b7280' }}>
-              Showing {mapMarkers.length} facilities • Scroll to zoom, drag to pan
-            </div>
+        {/* Legend */}
+        <div className="card" style={{ width: 200, padding: 16 }}>
+          <div style={{ fontWeight: 600, marginBottom: 12, fontSize: 14 }}>
+            <MapPin size={14} style={{ marginRight: 6 }} />
+            Map Legend
           </div>
 
-          {/* Legend */}
-          <div className="card" style={{ padding: 16, height: 'fit-content' }}>
-            <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: '#171717' }}>Show on Map</h3>
+          {/* Show All Toggle */}
+          <div
+            onClick={() => toggleMapFilter('showAll')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '8px 0',
+              cursor: 'pointer',
+              borderBottom: '1px solid #e5e5e5',
+              marginBottom: 8
+            }}
+          >
+            {mapFilters.showAll ? <Eye size={14} color="#0b7280" /> : <EyeOff size={14} color="#a3a3a3" />}
+            <span style={{ fontSize: 12, fontWeight: 500 }}>Show All</span>
+          </div>
 
-            {/* Show All Toggle */}
+          {/* Company filters */}
+          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6, fontWeight: 600 }}>CURRENT OPERATIONS</div>
+          {Object.keys(mapFilters.companies).map(company => (
             <div
-              onClick={() => toggleMapFilter('showAll')}
+              key={company}
+              onClick={() => toggleMapFilter('company', company)}
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 10,
-                padding: '8px 10px',
-                background: mapFilters.showAll ? '#f0fdfa' : '#f5f5f5',
-                borderRadius: 6,
+                gap: 8,
+                padding: '6px 0',
                 cursor: 'pointer',
-                marginBottom: 12,
-                border: mapFilters.showAll ? '1px solid #0b7280' : '1px solid transparent'
+                opacity: mapFilters.companies[company] ? 1 : 0.5
               }}
             >
-              {mapFilters.showAll ? <Eye size={16} color="#0b7280" /> : <EyeOff size={16} color="#9ca3af" />}
-              <span style={{ fontWeight: 600, fontSize: 13, color: mapFilters.showAll ? '#0b7280' : '#6b7280' }}>
-                Show All
-              </span>
+              <div style={{
+                width: 12,
+                height: 12,
+                borderRadius: '50%',
+                background: COMPANY_COLORS[company] || '#6b7280',
+                border: '2px solid white',
+                boxShadow: '0 0 0 1px ' + (COMPANY_COLORS[company] || '#6b7280')
+              }} />
+              <span style={{ fontSize: 12 }}>{company}</span>
+              {mapFilters.companies[company] ? <Eye size={12} color="#0b7280" /> : <EyeOff size={12} color="#a3a3a3" />}
             </div>
+          ))}
 
-            {/* Current Operations Section */}
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', marginBottom: 8, textTransform: 'uppercase' }}>
-                Current Operations
-              </div>
-              {Object.keys(mapFilters.companies).map(company => (
-                <div
-                  key={company}
-                  onClick={() => toggleMapFilter('company', company)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    padding: '6px 8px',
-                    borderRadius: 4,
-                    cursor: 'pointer',
-                    marginBottom: 4,
-                    background: mapFilters.companies[company] ? '#fafafa' : 'transparent',
-                    opacity: mapFilters.companies[company] ? 1 : 0.5
-                  }}
-                >
-                  <div style={{
-                    width: 12,
-                    height: 12,
-                    borderRadius: '50%',
-                    background: COMPANY_COLORS[company] || '#6b7280',
-                    border: mapFilters.companies[company] ? 'none' : '2px solid #d1d5db'
-                  }} />
-                  <span style={{ fontSize: 12, color: '#374151' }}>{company}</span>
-                </div>
-              ))}
-            </div>
+          {/* Deals filter */}
+          <div style={{ fontSize: 11, color: '#64748b', marginTop: 12, marginBottom: 6, fontWeight: 600 }}>PIPELINE DEALS</div>
+          <div
+            onClick={() => toggleMapFilter('deals')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '6px 0',
+              cursor: 'pointer',
+              opacity: mapFilters.deals ? 1 : 0.5
+            }}
+          >
+            <div style={{
+              width: 12,
+              height: 12,
+              borderRadius: '50%',
+              background: DEAL_COLOR,
+              border: '2px solid white',
+              boxShadow: '0 0 0 1px ' + DEAL_COLOR
+            }} />
+            <span style={{ fontSize: 12 }}>Deal Properties</span>
+            {mapFilters.deals ? <Eye size={12} color="#0b7280" /> : <EyeOff size={12} color="#a3a3a3" />}
+          </div>
 
-            {/* Deals Section */}
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', marginBottom: 8, textTransform: 'uppercase' }}>
-                Pipeline Deals
-              </div>
-              <div
-                onClick={() => toggleMapFilter('deals')}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '6px 8px',
-                  borderRadius: 4,
-                  cursor: 'pointer',
-                  background: mapFilters.deals ? '#fafafa' : 'transparent',
-                  opacity: mapFilters.deals ? 1 : 0.5
-                }}
-              >
-                <div style={{
-                  width: 12,
-                  height: 12,
-                  borderRadius: '50%',
-                  background: DEAL_COLOR,
-                  border: mapFilters.deals ? 'none' : '2px solid #d1d5db'
-                }} />
-                <span style={{ fontSize: 12, color: '#374151' }}>All Deals ({deals.length})</span>
-              </div>
-            </div>
+          <div style={{ marginTop: 12, fontSize: 11, color: '#94a3b8' }}>
+            {mapMarkers.length} locations shown
           </div>
         </div>
       </div>
+
     </div>
   )
 }
