@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, createContext, useContext } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Building2, Upload, FileText, Trash2, DollarSign, BarChart3, Edit2, Save, X, Plus, CheckCircle, Clock, RefreshCw, Eye, Loader2, Zap, MapPin, Star, Folder, FolderOpen, ChevronRight, ChevronDown, MoveRight } from 'lucide-react'
-import { getDeal, updateDeal, deleteDeal, updateDealStatus, uploadDocument, deleteDocument, getValuation, createProperty, deleteProperty, createTask, updateTask, formatCurrency, formatNumber, formatDate, formatDateTime } from '../services/api'
+import { ArrowLeft, Building2, Upload, FileText, Trash2, DollarSign, BarChart3, Edit2, Save, X, Plus, CheckCircle, Clock, RefreshCw, Eye, Loader2, Zap, MapPin, Star, Folder, FolderOpen, ChevronRight, ChevronDown, MoveRight, AlertTriangle, TrendingUp, Shield, Play, FileSearch } from 'lucide-react'
+import { getDeal, updateDeal, deleteDeal, updateDealStatus, uploadDocument, deleteDocument, getValuation, createProperty, deleteProperty, createTask, updateTask, formatCurrency, formatNumber, formatPercent, formatDate, formatDateTime, getDealScorecard, calculateScorecard, getDealRiskFlags, detectRisks, getFinancialSummary, getDealClaims, runFullAnalysis } from '../services/api'
 import api from '../services/api'
 
 const STS = [
@@ -328,6 +328,10 @@ function DealDetail() {
         <button className={'tab ' + (tab === 'activity' ? 'active' : '')} onClick={() => setTab('activity')}>
           Activity
         </button>
+        <button className={'tab ' + (tab === 'analysis' ? 'active' : '')} onClick={() => setTab('analysis')} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <FileSearch size={14} />
+          Analysis
+        </button>
       </div>
 
       {/* Tab Content */}
@@ -337,6 +341,7 @@ function DealDetail() {
       {tab === 'properties' && <Props deal={deal} onRefresh={load} confirm={confirm} />}
       {tab === 'tasks' && <Tasks deal={deal} onRefresh={load} />}
       {tab === 'activity' && <Activity deal={deal} />}
+      {tab === 'analysis' && <Analysis deal={deal} />}
 
       {/* Confirmation Dialog */}
       <ConfirmDialog />
@@ -1376,6 +1381,438 @@ function Activity({ deal }) {
       ) : (
         <p style={{ color: '#737373', fontSize: 13 }}>No activity yet</p>
       )}
+    </div>
+  )
+}
+
+// Analysis Tab Component
+function Analysis({ deal }) {
+  const [loading, setLoading] = useState(true)
+  const [running, setRunning] = useState(false)
+  const [scorecard, setScorecard] = useState(null)
+  const [riskFlags, setRiskFlags] = useState([])
+  const [financials, setFinancials] = useState(null)
+  const [claims, setClaims] = useState([])
+  const [error, setError] = useState(null)
+
+  const loadAnalysis = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const [sc, rf, fin, cl] = await Promise.all([
+        getDealScorecard(deal.id).catch(() => null),
+        getDealRiskFlags(deal.id).catch(() => []),
+        getFinancialSummary(deal.id).catch(() => null),
+        getDealClaims(deal.id).catch(() => [])
+      ])
+      setScorecard(sc)
+      setRiskFlags(rf || [])
+      setFinancials(fin)
+      setClaims(cl || [])
+    } catch (err) {
+      setError('Failed to load analysis data')
+    }
+    setLoading(false)
+  }
+
+  useEffect(() => { loadAnalysis() }, [deal.id])
+
+  const runAnalysis = async () => {
+    setRunning(true)
+    setError(null)
+    try {
+      await runFullAnalysis(deal.id)
+      // Reload after analysis
+      await loadAnalysis()
+    } catch (err) {
+      setError('Analysis failed: ' + (err.response?.data?.detail || err.message))
+    }
+    setRunning(false)
+  }
+
+  const getScoreColor = (score) => {
+    if (score >= 70) return '#059669'
+    if (score >= 50) return '#d97706'
+    return '#dc2626'
+  }
+
+  const getRecommendationStyle = (rec) => {
+    const styles = {
+      strong_proceed: { bg: '#dcfce7', color: '#166534', label: 'Strong Proceed' },
+      proceed_with_caution: { bg: '#fef9c3', color: '#854d0e', label: 'Proceed with Caution' },
+      needs_further_review: { bg: '#fed7aa', color: '#9a3412', label: 'Needs Further Review' },
+      not_recommended: { bg: '#fee2e2', color: '#991b1b', label: 'Not Recommended' },
+      pass: { bg: '#fee2e2', color: '#991b1b', label: 'Pass' }
+    }
+    return styles[rec] || { bg: '#f3f4f6', color: '#374151', label: rec || 'Pending' }
+  }
+
+  const getSeverityStyle = (severity) => {
+    const styles = {
+      high: { bg: '#fee2e2', color: '#991b1b', border: '#fecaca' },
+      medium: { bg: '#fef3c7', color: '#92400e', border: '#fde68a' },
+      low: { bg: '#d1fae5', color: '#065f46', border: '#a7f3d0' }
+    }
+    return styles[severity] || styles.medium
+  }
+
+  if (loading) {
+    return (
+      <div className="card" style={{ textAlign: 'center', padding: 60 }}>
+        <Loader2 size={32} className="spin" style={{ margin: '0 auto 16px', color: '#6366f1' }} />
+        <p style={{ color: '#737373' }}>Loading analysis data...</p>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Header with Run Analysis button */}
+      <div className="card">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h3 style={{ fontSize: 18, fontWeight: 600, color: '#171717', marginBottom: 4 }}>Deal Analysis</h3>
+            <p style={{ fontSize: 13, color: '#737373' }}>
+              Comprehensive analysis of documents, financials, and risk factors
+            </p>
+          </div>
+          <button
+            className="btn btn-primary"
+            onClick={runAnalysis}
+            disabled={running}
+            style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+          >
+            {running ? (
+              <>
+                <Loader2 size={16} className="spin" />
+                Running Analysis...
+              </>
+            ) : (
+              <>
+                <Play size={16} />
+                Run Full Analysis
+              </>
+            )}
+          </button>
+        </div>
+        {error && (
+          <div style={{ marginTop: 12, padding: 12, background: '#fee2e2', borderRadius: 6, color: '#991b1b', fontSize: 13 }}>
+            {error}
+          </div>
+        )}
+      </div>
+
+      {/* Scorecard */}
+      <div className="card">
+        <h3 className="card-title" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <TrendingUp size={18} />
+          Deal Scorecard
+        </h3>
+
+        {scorecard ? (
+          <div>
+            {/* Recommendation Banner */}
+            {scorecard.recommendation && (
+              <div style={{
+                padding: 16,
+                borderRadius: 8,
+                marginBottom: 20,
+                background: getRecommendationStyle(scorecard.recommendation).bg,
+                color: getRecommendationStyle(scorecard.recommendation).color
+              }}>
+                <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>
+                  Recommendation: {getRecommendationStyle(scorecard.recommendation).label}
+                </div>
+                {scorecard.recommendation_summary && (
+                  <div style={{ fontSize: 13, opacity: 0.9 }}>{scorecard.recommendation_summary}</div>
+                )}
+              </div>
+            )}
+
+            {/* Overall Score */}
+            <div style={{ textAlign: 'center', marginBottom: 24 }}>
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 100,
+                height: 100,
+                borderRadius: '50%',
+                background: `conic-gradient(${getScoreColor(scorecard.overall_score || 0)} ${(scorecard.overall_score || 0) * 3.6}deg, #e5e7eb 0deg)`,
+                position: 'relative'
+              }}>
+                <div style={{
+                  width: 80,
+                  height: 80,
+                  borderRadius: '50%',
+                  background: 'white',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexDirection: 'column'
+                }}>
+                  <span style={{ fontSize: 28, fontWeight: 700, color: getScoreColor(scorecard.overall_score || 0) }}>
+                    {Math.round(scorecard.overall_score || 0)}
+                  </span>
+                </div>
+              </div>
+              <div style={{ marginTop: 8, fontWeight: 600, color: '#374151' }}>Overall Score</div>
+            </div>
+
+            {/* Score Breakdown */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+              {[
+                { label: 'Financial', score: scorecard.financial_score },
+                { label: 'Operational', score: scorecard.operational_score },
+                { label: 'Quality', score: scorecard.quality_score },
+                { label: 'Compliance', score: scorecard.compliance_score }
+              ].map(item => (
+                <div key={item.label} style={{ padding: 12, background: '#f9fafb', borderRadius: 8 }}>
+                  <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{item.label}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ flex: 1, height: 8, background: '#e5e7eb', borderRadius: 4, overflow: 'hidden' }}>
+                      <div style={{
+                        width: `${item.score || 0}%`,
+                        height: '100%',
+                        background: getScoreColor(item.score || 0),
+                        borderRadius: 4
+                      }} />
+                    </div>
+                    <span style={{ fontWeight: 600, fontSize: 14, color: getScoreColor(item.score || 0) }}>
+                      {Math.round(item.score || 0)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Key Strengths */}
+            {scorecard.key_strengths?.length > 0 && (
+              <div style={{ marginTop: 20 }}>
+                <div style={{ fontWeight: 600, marginBottom: 8, color: '#059669' }}>Key Strengths</div>
+                {scorecard.key_strengths.map((s, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, fontSize: 13 }}>
+                    <CheckCircle size={14} color="#059669" />
+                    <span>{s.description || s.area}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', padding: 40, color: '#737373' }}>
+            <Shield size={40} style={{ marginBottom: 12, opacity: 0.5 }} />
+            <p>No scorecard calculated yet. Run full analysis to generate.</p>
+          </div>
+        )}
+      </div>
+
+      {/* Risk Flags */}
+      <div className="card">
+        <h3 className="card-title" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <AlertTriangle size={18} />
+          Risk Flags ({riskFlags.length})
+        </h3>
+
+        {riskFlags.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {riskFlags.map(flag => {
+              const style = getSeverityStyle(flag.severity)
+              return (
+                <div key={flag.id} style={{
+                  padding: 14,
+                  background: style.bg,
+                  border: `1px solid ${style.border}`,
+                  borderRadius: 8
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                    <div>
+                      <div style={{ fontWeight: 600, color: style.color, marginBottom: 4 }}>{flag.title}</div>
+                      <div style={{ fontSize: 13, color: '#525252', marginBottom: 8 }}>{flag.description}</div>
+                      {flag.recommendation && (
+                        <div style={{ fontSize: 12, color: '#737373', fontStyle: 'italic' }}>
+                          💡 {flag.recommendation}
+                        </div>
+                      )}
+                    </div>
+                    <span style={{
+                      padding: '4px 10px',
+                      borderRadius: 12,
+                      fontSize: 11,
+                      fontWeight: 600,
+                      textTransform: 'uppercase',
+                      background: style.color,
+                      color: 'white'
+                    }}>
+                      {flag.severity}
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', padding: 40, color: '#737373' }}>
+            <CheckCircle size={40} style={{ marginBottom: 12, opacity: 0.5, color: '#059669' }} />
+            <p>No risk flags identified</p>
+          </div>
+        )}
+      </div>
+
+      {/* Financial Summary */}
+      {financials?.metrics && Object.keys(financials.metrics).length > 0 && (
+        <div className="card">
+          <h3 className="card-title" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <DollarSign size={18} />
+            Financial Summary
+          </h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+            {financials.metrics.total_revenue > 0 && (
+              <div style={{ padding: 16, background: '#f0fdf4', borderRadius: 8, textAlign: 'center' }}>
+                <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>Total Revenue</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: '#059669' }}>
+                  {formatCurrency(financials.metrics.total_revenue)}
+                </div>
+              </div>
+            )}
+            {financials.metrics.ebitdar > 0 && (
+              <div style={{ padding: 16, background: '#eff6ff', borderRadius: 8, textAlign: 'center' }}>
+                <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>EBITDAR</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: '#2563eb' }}>
+                  {formatCurrency(financials.metrics.ebitdar)}
+                </div>
+              </div>
+            )}
+            {financials.metrics.ebitdar_margin > 0 && (
+              <div style={{ padding: 16, background: '#faf5ff', borderRadius: 8, textAlign: 'center' }}>
+                <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>EBITDAR Margin</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: '#7c3aed' }}>
+                  {formatPercent(financials.metrics.ebitdar_margin)}
+                </div>
+              </div>
+            )}
+            {financials.metrics.labor_ratio > 0 && (
+              <div style={{ padding: 16, background: '#fff7ed', borderRadius: 8, textAlign: 'center' }}>
+                <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>Labor Ratio</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: '#ea580c' }}>
+                  {formatPercent(financials.metrics.labor_ratio)}
+                </div>
+              </div>
+            )}
+            {financials.metrics.total_opex > 0 && (
+              <div style={{ padding: 16, background: '#fef2f2', borderRadius: 8, textAlign: 'center' }}>
+                <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>Total OpEx</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: '#dc2626' }}>
+                  {formatCurrency(financials.metrics.total_opex)}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Claims Summary */}
+      {claims.length > 0 && (
+        <div className="card">
+          <h3 className="card-title" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <FileSearch size={18} />
+            OM Claims ({claims.length})
+          </h3>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Type</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Claimed</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Verified</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Variance</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {claims.slice(0, 10).map(claim => (
+                  <tr key={claim.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                    <td style={{ padding: '10px 12px' }}>
+                      <span style={{ fontWeight: 500 }}>{claim.claim_type}</span>
+                      <div style={{ fontSize: 11, color: '#6b7280' }}>{claim.claim_category}</div>
+                    </td>
+                    <td style={{ padding: '10px 12px' }}>{claim.claimed_value || '-'}</td>
+                    <td style={{ padding: '10px 12px' }}>{claim.verified_value || '-'}</td>
+                    <td style={{ padding: '10px 12px' }}>
+                      {claim.variance_pct != null ? (
+                        <span style={{ color: Math.abs(claim.variance_pct) > 10 ? '#dc2626' : '#059669' }}>
+                          {claim.variance_pct > 0 ? '+' : ''}{claim.variance_pct.toFixed(1)}%
+                        </span>
+                      ) : '-'}
+                    </td>
+                    <td style={{ padding: '10px 12px' }}>
+                      <span style={{
+                        padding: '2px 8px',
+                        borderRadius: 4,
+                        fontSize: 11,
+                        fontWeight: 500,
+                        background: claim.verification_status === 'verified' ? '#dcfce7' :
+                                   claim.verification_status === 'flagged' ? '#fee2e2' :
+                                   claim.verification_status === 'disputed' ? '#fef3c7' : '#f3f4f6',
+                        color: claim.verification_status === 'verified' ? '#166534' :
+                               claim.verification_status === 'flagged' ? '#991b1b' :
+                               claim.verification_status === 'disputed' ? '#92400e' : '#374151'
+                      }}>
+                        {claim.verification_status}
+                      </span>
+                      {claim.is_red_flag && (
+                        <AlertTriangle size={14} color="#dc2626" style={{ marginLeft: 6 }} />
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {claims.length > 10 && (
+              <div style={{ padding: 12, textAlign: 'center', color: '#6b7280', fontSize: 12 }}>
+                Showing 10 of {claims.length} claims
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Export Links */}
+      <div className="card">
+        <h3 className="card-title" style={{ marginBottom: 16 }}>Export Reports</h3>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <a
+            href={`/api/deals/${deal.id}/export/ic-memo.html`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-secondary"
+            style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            <FileText size={14} />
+            IC Memo (HTML)
+          </a>
+          <a
+            href={`/api/deals/${deal.id}/export/data.json`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-secondary"
+            style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            <FileText size={14} />
+            Full Data (JSON)
+          </a>
+          <a
+            href={`/api/deals/${deal.id}/export/financials.csv`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-secondary"
+            style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            <FileText size={14} />
+            Financials (CSV)
+          </a>
+        </div>
+      </div>
     </div>
   )
 }
