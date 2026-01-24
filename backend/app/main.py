@@ -19,6 +19,9 @@ from . import om_scrubber
 from . import financial_ingestion
 from . import risk_scoring
 from . import export_reports
+from . import market_analysis
+from . import property_research
+from . import deep_financial_analysis
 
 models.Base.metadata.create_all(bind=engine)
 app = FastAPI(title="SNFalyze Deal Tracker")
@@ -1023,6 +1026,156 @@ def export_financials_csv(deal_id: int, db: Session = Depends(get_db)):
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename=deal_{deal_id}_financials.csv"}
     )
+
+
+# ============================================================================
+# ENHANCED ANALYSIS ENDPOINTS
+# ============================================================================
+
+@app.get("/api/deals/{deal_id}/market-analysis")
+def get_market_analysis(deal_id: int, db: Session = Depends(get_db)):
+    """Get comprehensive market analysis including regulatory, reimbursement, and demographics"""
+    deal = crud.get_deal(db, deal_id)
+    if not deal: raise HTTPException(404, "Deal not found")
+    return market_analysis.generate_market_analysis(db, deal_id)
+
+@app.post("/api/deals/{deal_id}/market-analysis")
+def run_market_analysis(deal_id: int, db: Session = Depends(get_db)):
+    """Run and store market analysis for a deal"""
+    deal = crud.get_deal(db, deal_id)
+    if not deal: raise HTTPException(404, "Deal not found")
+    analysis = market_analysis.generate_market_analysis(db, deal_id)
+    market_analysis.store_market_analysis(db, deal_id, analysis)
+    return analysis
+
+@app.get("/api/deals/{deal_id}/property-research")
+def get_property_research(deal_id: int, db: Session = Depends(get_db)):
+    """Get property research including CMS data, inspection history, and risk indicators"""
+    deal = crud.get_deal(db, deal_id)
+    if not deal: raise HTTPException(404, "Deal not found")
+    return property_research.research_deal_properties(db, deal_id)
+
+@app.post("/api/deals/{deal_id}/property-research")
+def run_property_research(deal_id: int, db: Session = Depends(get_db)):
+    """Run and store property research for a deal"""
+    deal = crud.get_deal(db, deal_id)
+    if not deal: raise HTTPException(404, "Deal not found")
+    research = property_research.research_deal_properties(db, deal_id)
+    property_research.store_property_research(db, deal_id, research)
+    return research
+
+@app.get("/api/properties/{property_id}/research")
+def get_single_property_research(property_id: int, db: Session = Depends(get_db)):
+    """Get research for a single property"""
+    prop = db.query(models.Property).filter(models.Property.id == property_id).first()
+    if not prop: raise HTTPException(404, "Property not found")
+    return property_research.research_property(db, property_id)
+
+@app.get("/api/deals/{deal_id}/deep-financial-analysis")
+def get_deep_financial_analysis(deal_id: int, db: Session = Depends(get_db)):
+    """Get comprehensive financial analysis with benchmarking and trends"""
+    deal = crud.get_deal(db, deal_id)
+    if not deal: raise HTTPException(404, "Deal not found")
+    return deep_financial_analysis.generate_deep_financial_analysis(db, deal_id)
+
+@app.post("/api/deals/{deal_id}/deep-financial-analysis")
+def run_deep_financial_analysis(deal_id: int, db: Session = Depends(get_db)):
+    """Run and store deep financial analysis for a deal"""
+    deal = crud.get_deal(db, deal_id)
+    if not deal: raise HTTPException(404, "Deal not found")
+    analysis = deep_financial_analysis.generate_deep_financial_analysis(db, deal_id)
+    deep_financial_analysis.store_financial_analysis(db, deal_id, analysis)
+    return analysis
+
+@app.get("/api/deals/{deal_id}/export/proforma.csv")
+def export_proforma_csv(deal_id: int, db: Session = Depends(get_db)):
+    """Export pro forma template as CSV for Excel"""
+    deal = crud.get_deal(db, deal_id)
+    if not deal: raise HTTPException(404, "Deal not found")
+    csv_content = deep_financial_analysis.generate_proforma_template(db, deal_id)
+    return Response(
+        content=csv_content,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=deal_{deal_id}_proforma.csv"}
+    )
+
+@app.post("/api/deals/{deal_id}/comprehensive-analysis")
+def run_comprehensive_analysis(deal_id: int, db: Session = Depends(get_db)):
+    """Run complete enhanced analysis: market analysis, property research, deep financials, risks, scorecard"""
+    deal = crud.get_deal(db, deal_id)
+    if not deal: raise HTTPException(404, "Deal not found")
+
+    results = {"deal_id": deal_id, "steps": []}
+
+    # Step 1: Document analysis
+    analysis_job = analysis_pipeline.start_deal_analysis(db, deal_id)
+    results["steps"].append({
+        "step": "document_analysis",
+        "job_id": analysis_job.id,
+        "status": "started"
+    })
+
+    # Step 2: Market analysis
+    try:
+        mkt_analysis = market_analysis.generate_market_analysis(db, deal_id)
+        market_analysis.store_market_analysis(db, deal_id, mkt_analysis)
+        results["steps"].append({
+            "step": "market_analysis",
+            "status": "completed",
+            "regulatory_environment": mkt_analysis.get("regulatory_environment", {}).get("regulatory_agency")
+        })
+    except Exception as e:
+        results["steps"].append({"step": "market_analysis", "status": "error", "error": str(e)})
+
+    # Step 3: Property research
+    try:
+        prop_research = property_research.research_deal_properties(db, deal_id)
+        property_research.store_property_research(db, deal_id, prop_research)
+        results["steps"].append({
+            "step": "property_research",
+            "status": "completed",
+            "properties_found_in_cms": prop_research.get("summary", {}).get("properties_found_in_cms", 0),
+            "high_risk_properties": prop_research.get("summary", {}).get("high_risk_properties", 0)
+        })
+    except Exception as e:
+        results["steps"].append({"step": "property_research", "status": "error", "error": str(e)})
+
+    # Step 4: Deep financial analysis
+    try:
+        fin_analysis = deep_financial_analysis.generate_deep_financial_analysis(db, deal_id)
+        deep_financial_analysis.store_financial_analysis(db, deal_id, fin_analysis)
+        results["steps"].append({
+            "step": "deep_financial_analysis",
+            "status": "completed",
+            "ebitdar_margin": fin_analysis.get("summary", {}).get("ebitdar_margin"),
+            "opportunities": len(fin_analysis.get("opportunities", []))
+        })
+    except Exception as e:
+        results["steps"].append({"step": "deep_financial_analysis", "status": "error", "error": str(e)})
+
+    # Step 5: Verify claims
+    claims_updated = om_scrubber.verify_claims_against_evidence(db, deal_id)
+    results["steps"].append({
+        "step": "claim_verification",
+        "claims_updated": claims_updated
+    })
+
+    # Step 6: Detect risks
+    risks_created = risk_scoring.create_risk_flags_for_deal(db, deal_id)
+    results["steps"].append({
+        "step": "risk_detection",
+        "flags_created": risks_created
+    })
+
+    # Step 7: Calculate scorecard
+    scorecard = risk_scoring.calculate_deal_scorecard(db, deal_id)
+    results["steps"].append({
+        "step": "scorecard",
+        "overall_score": scorecard.overall_score,
+        "recommendation": scorecard.recommendation
+    })
+
+    return results
 
 
 # Serve frontend for non-API routes (must be at the end)

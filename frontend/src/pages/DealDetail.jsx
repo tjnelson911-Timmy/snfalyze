@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, createContext, useContext } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Building2, Upload, FileText, Trash2, DollarSign, BarChart3, Edit2, Save, X, Plus, CheckCircle, Clock, RefreshCw, Eye, Loader2, Zap, MapPin, Star, Folder, FolderOpen, ChevronRight, ChevronDown, MoveRight, AlertTriangle, TrendingUp, Shield, Play, FileSearch } from 'lucide-react'
-import { getDeal, updateDeal, deleteDeal, updateDealStatus, uploadDocument, deleteDocument, getValuation, createProperty, deleteProperty, createTask, updateTask, formatCurrency, formatNumber, formatPercent, formatDate, formatDateTime, getDealScorecard, calculateScorecard, getDealRiskFlags, detectRisks, getFinancialSummary, getDealClaims, runFullAnalysis } from '../services/api'
+import { getDeal, updateDeal, deleteDeal, updateDealStatus, uploadDocument, deleteDocument, getValuation, createProperty, deleteProperty, createTask, updateTask, formatCurrency, formatNumber, formatPercent, formatDate, formatDateTime, getDealScorecard, calculateScorecard, getDealRiskFlags, detectRisks, getFinancialSummary, getDealClaims, runFullAnalysis, getMarketAnalysis, getPropertyResearch, getDeepFinancialAnalysis, runComprehensiveAnalysis } from '../services/api'
 import api from '../services/api'
 
 const STS = [
@@ -1393,22 +1393,43 @@ function Analysis({ deal }) {
   const [riskFlags, setRiskFlags] = useState([])
   const [financials, setFinancials] = useState(null)
   const [claims, setClaims] = useState([])
+  const [marketAnalysis, setMarketAnalysis] = useState(null)
+  const [propertyResearch, setPropertyResearch] = useState(null)
+  const [deepFinancials, setDeepFinancials] = useState(null)
   const [error, setError] = useState(null)
+  const [expandedSections, setExpandedSections] = useState({
+    scorecard: true,
+    market: true,
+    property: true,
+    financials: true,
+    risks: true,
+    claims: false
+  })
+
+  const toggleSection = (section) => {
+    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }))
+  }
 
   const loadAnalysis = async () => {
     setLoading(true)
     setError(null)
     try {
-      const [sc, rf, fin, cl] = await Promise.all([
+      const [sc, rf, fin, cl, mkt, prop, deep] = await Promise.all([
         getDealScorecard(deal.id).catch(() => null),
         getDealRiskFlags(deal.id).catch(() => []),
         getFinancialSummary(deal.id).catch(() => null),
-        getDealClaims(deal.id).catch(() => [])
+        getDealClaims(deal.id).catch(() => []),
+        getMarketAnalysis(deal.id).catch(() => null),
+        getPropertyResearch(deal.id).catch(() => null),
+        getDeepFinancialAnalysis(deal.id).catch(() => null)
       ])
       setScorecard(sc)
       setRiskFlags(rf || [])
       setFinancials(fin)
       setClaims(cl || [])
+      setMarketAnalysis(mkt)
+      setPropertyResearch(prop)
+      setDeepFinancials(deep)
     } catch (err) {
       setError('Failed to load analysis data')
     }
@@ -1421,8 +1442,7 @@ function Analysis({ deal }) {
     setRunning(true)
     setError(null)
     try {
-      await runFullAnalysis(deal.id)
-      // Reload after analysis
+      await runComprehensiveAnalysis(deal.id)
       await loadAnalysis()
     } catch (err) {
       setError('Analysis failed: ' + (err.response?.data?.detail || err.message))
@@ -1434,6 +1454,16 @@ function Analysis({ deal }) {
     if (score >= 70) return '#059669'
     if (score >= 50) return '#d97706'
     return '#dc2626'
+  }
+
+  const getRatingColor = (rating) => {
+    const colors = {
+      excellent: '#059669',
+      good: '#10b981',
+      average: '#d97706',
+      poor: '#dc2626'
+    }
+    return colors[rating] || '#6b7280'
   }
 
   const getRecommendationStyle = (rec) => {
@@ -1460,7 +1490,7 @@ function Analysis({ deal }) {
     return (
       <div className="card" style={{ textAlign: 'center', padding: 60 }}>
         <Loader2 size={32} className="spin" style={{ margin: '0 auto 16px', color: '#6366f1' }} />
-        <p style={{ color: '#737373' }}>Loading analysis data...</p>
+        <p style={{ color: '#737373' }}>Loading comprehensive analysis...</p>
       </div>
     )
   }
@@ -1471,9 +1501,9 @@ function Analysis({ deal }) {
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <h3 style={{ fontSize: 18, fontWeight: 600, color: '#171717', marginBottom: 4 }}>Deal Analysis</h3>
+            <h3 style={{ fontSize: 18, fontWeight: 600, color: '#171717', marginBottom: 4 }}>Comprehensive Deal Analysis</h3>
             <p style={{ fontSize: 13, color: '#737373' }}>
-              Comprehensive analysis of documents, financials, and risk factors
+              Market analysis, property research, financial deep-dive, and risk assessment
             </p>
           </div>
           <button
@@ -1490,7 +1520,7 @@ function Analysis({ deal }) {
             ) : (
               <>
                 <Play size={16} />
-                Run Full Analysis
+                Run Comprehensive Analysis
               </>
             )}
           </button>
@@ -1504,14 +1534,16 @@ function Analysis({ deal }) {
 
       {/* Scorecard */}
       <div className="card">
-        <h3 className="card-title" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <TrendingUp size={18} />
-          Deal Scorecard
-        </h3>
+        <div onClick={() => toggleSection('scorecard')} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h3 className="card-title" style={{ marginBottom: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <TrendingUp size={18} />
+            Deal Scorecard
+          </h3>
+          {expandedSections.scorecard ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+        </div>
 
-        {scorecard ? (
-          <div>
-            {/* Recommendation Banner */}
+        {expandedSections.scorecard && scorecard && (
+          <div style={{ marginTop: 16 }}>
             {scorecard.recommendation && (
               <div style={{
                 padding: 16,
@@ -1529,8 +1561,7 @@ function Analysis({ deal }) {
               </div>
             )}
 
-            {/* Overall Score */}
-            <div style={{ textAlign: 'center', marginBottom: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
               <div style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -1548,19 +1579,16 @@ function Analysis({ deal }) {
                   background: 'white',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  flexDirection: 'column'
+                  justifyContent: 'center'
                 }}>
                   <span style={{ fontSize: 28, fontWeight: 700, color: getScoreColor(scorecard.overall_score || 0) }}>
                     {Math.round(scorecard.overall_score || 0)}
                   </span>
                 </div>
               </div>
-              <div style={{ marginTop: 8, fontWeight: 600, color: '#374151' }}>Overall Score</div>
             </div>
 
-            {/* Score Breakdown */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
               {[
                 { label: 'Financial', score: scorecard.financial_score },
                 { label: 'Operational', score: scorecard.operational_score },
@@ -1568,9 +1596,9 @@ function Analysis({ deal }) {
                 { label: 'Compliance', score: scorecard.compliance_score }
               ].map(item => (
                 <div key={item.label} style={{ padding: 12, background: '#f9fafb', borderRadius: 8 }}>
-                  <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{item.label}</div>
+                  <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>{item.label}</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ flex: 1, height: 8, background: '#e5e7eb', borderRadius: 4, overflow: 'hidden' }}>
+                    <div style={{ flex: 1, height: 6, background: '#e5e7eb', borderRadius: 4, overflow: 'hidden' }}>
                       <div style={{
                         width: `${item.score || 0}%`,
                         height: '100%',
@@ -1578,202 +1606,650 @@ function Analysis({ deal }) {
                         borderRadius: 4
                       }} />
                     </div>
-                    <span style={{ fontWeight: 600, fontSize: 14, color: getScoreColor(item.score || 0) }}>
+                    <span style={{ fontWeight: 600, fontSize: 13, color: getScoreColor(item.score || 0), minWidth: 24 }}>
                       {Math.round(item.score || 0)}
                     </span>
                   </div>
                 </div>
               ))}
             </div>
+          </div>
+        )}
+        {expandedSections.scorecard && !scorecard && (
+          <div style={{ marginTop: 16, textAlign: 'center', padding: 40, color: '#737373' }}>
+            <Shield size={40} style={{ marginBottom: 12, opacity: 0.5 }} />
+            <p>No scorecard calculated yet. Run comprehensive analysis to generate.</p>
+          </div>
+        )}
+      </div>
 
-            {/* Key Strengths */}
-            {scorecard.key_strengths?.length > 0 && (
-              <div style={{ marginTop: 20 }}>
-                <div style={{ fontWeight: 600, marginBottom: 8, color: '#059669' }}>Key Strengths</div>
-                {scorecard.key_strengths.map((s, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, fontSize: 13 }}>
-                    <CheckCircle size={14} color="#059669" />
-                    <span>{s.description || s.area}</span>
+      {/* Market Analysis */}
+      <div className="card">
+        <div onClick={() => toggleSection('market')} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h3 className="card-title" style={{ marginBottom: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <MapPin size={18} />
+            Market Analysis
+          </h3>
+          {expandedSections.market ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+        </div>
+
+        {expandedSections.market && marketAnalysis && (
+          <div style={{ marginTop: 16 }}>
+            {/* Regulatory Environment */}
+            {marketAnalysis.regulatory_environment && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontWeight: 600, marginBottom: 12, color: '#374151', fontSize: 14 }}>Regulatory Environment</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+                  <div style={{ padding: 12, background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>Regulatory Agency</div>
+                    <div style={{ fontSize: 13, fontWeight: 500 }}>{marketAnalysis.regulatory_environment.regulatory_agency || '-'}</div>
+                  </div>
+                  <div style={{ padding: 12, background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>Certificate of Need</div>
+                    <div style={{ fontSize: 13, fontWeight: 500 }}>
+                      <span style={{
+                        padding: '2px 8px',
+                        borderRadius: 4,
+                        background: marketAnalysis.regulatory_environment.certificate_of_need ? '#fee2e2' : '#dcfce7',
+                        color: marketAnalysis.regulatory_environment.certificate_of_need ? '#991b1b' : '#166534'
+                      }}>
+                        {marketAnalysis.regulatory_environment.certificate_of_need ? 'Required' : 'Not Required'}
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ padding: 12, background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>Enforcement Trends</div>
+                    <div style={{ fontSize: 13, fontWeight: 500 }}>{marketAnalysis.regulatory_environment.enforcement_trends || '-'}</div>
+                  </div>
+                  <div style={{ padding: 12, background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>Survey Frequency</div>
+                    <div style={{ fontSize: 13, fontWeight: 500 }}>{marketAnalysis.regulatory_environment.survey_frequency || '-'}</div>
+                  </div>
+                </div>
+                {marketAnalysis.regulatory_environment.staffing_requirements && (
+                  <div style={{ marginTop: 12, padding: 12, background: '#fffbeb', borderRadius: 8, border: '1px solid #fde68a' }}>
+                    <div style={{ fontSize: 11, color: '#92400e', marginBottom: 4 }}>Staffing Requirements</div>
+                    <div style={{ fontSize: 13 }}>
+                      {marketAnalysis.regulatory_environment.staffing_requirements.total_nursing_minimum && (
+                        <span>Min Total Nursing: <strong>{marketAnalysis.regulatory_environment.staffing_requirements.total_nursing_minimum} HPRD</strong></span>
+                      )}
+                      {marketAnalysis.regulatory_environment.staffing_requirements.rn_hours_minimum > 0 && (
+                        <span style={{ marginLeft: 16 }}>RN Hours: <strong>{marketAnalysis.regulatory_environment.staffing_requirements.rn_hours_minimum} HPRD</strong></span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Reimbursement Analysis */}
+            {marketAnalysis.reimbursement_analysis && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontWeight: 600, marginBottom: 12, color: '#374151', fontSize: 14 }}>Reimbursement Analysis</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
+                  {/* Medicaid */}
+                  {marketAnalysis.reimbursement_analysis.medicaid && (
+                    <div style={{ padding: 16, background: '#f0fdf4', borderRadius: 8, border: '1px solid #bbf7d0' }}>
+                      <div style={{ fontWeight: 600, color: '#166534', marginBottom: 12 }}>Medicaid</div>
+                      {marketAnalysis.reimbursement_analysis.medicaid.avg_daily_rate && (
+                        <div style={{ marginBottom: 8 }}>
+                          <span style={{ fontSize: 12, color: '#6b7280' }}>Avg Daily Rate:</span>
+                          <div style={{ fontSize: 20, fontWeight: 700, color: '#059669' }}>
+                            {formatCurrency(marketAnalysis.reimbursement_analysis.medicaid.avg_daily_rate)}
+                          </div>
+                        </div>
+                      )}
+                      <div style={{ fontSize: 12, color: '#525252' }}>
+                        {marketAnalysis.reimbursement_analysis.medicaid.rate_methodology}
+                      </div>
+                      {marketAnalysis.reimbursement_analysis.medicaid.recent_changes && (
+                        <div style={{ fontSize: 11, color: '#059669', marginTop: 8, fontStyle: 'italic' }}>
+                          📈 {marketAnalysis.reimbursement_analysis.medicaid.recent_changes}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {/* Medicare */}
+                  {marketAnalysis.reimbursement_analysis.medicare && (
+                    <div style={{ padding: 16, background: '#eff6ff', borderRadius: 8, border: '1px solid #bfdbfe' }}>
+                      <div style={{ fontWeight: 600, color: '#1d4ed8', marginBottom: 12 }}>Medicare SNF PPS</div>
+                      <div style={{ marginBottom: 8 }}>
+                        <span style={{ fontSize: 12, color: '#6b7280' }}>Payment System:</span>
+                        <div style={{ fontSize: 13, fontWeight: 500 }}>
+                          {marketAnalysis.reimbursement_analysis.medicare.payment_system}
+                        </div>
+                      </div>
+                      {marketAnalysis.reimbursement_analysis.medicare.urban_base_rate && (
+                        <div style={{ marginBottom: 8 }}>
+                          <span style={{ fontSize: 12, color: '#6b7280' }}>Urban Base Rate:</span>
+                          <div style={{ fontSize: 18, fontWeight: 700, color: '#2563eb' }}>
+                            {formatCurrency(marketAnalysis.reimbursement_analysis.medicare.urban_base_rate)}
+                          </div>
+                        </div>
+                      )}
+                      {marketAnalysis.reimbursement_analysis.medicare.net_increase && (
+                        <div style={{ fontSize: 11, color: '#2563eb', fontStyle: 'italic' }}>
+                          📈 Net Increase: {marketAnalysis.reimbursement_analysis.medicare.net_increase}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Market Demand */}
+            {marketAnalysis.market_demand && (
+              <div>
+                <div style={{ fontWeight: 600, marginBottom: 12, color: '#374151', fontSize: 14 }}>Market Demand</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+                  <div style={{ padding: 12, background: '#f9fafb', borderRadius: 8, textAlign: 'center' }}>
+                    <div style={{ fontSize: 11, color: '#6b7280' }}>National Avg Occupancy</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: '#374151' }}>
+                      {marketAnalysis.market_demand.national_avg_occupancy}%
+                    </div>
+                  </div>
+                  <div style={{ padding: 12, background: '#f9fafb', borderRadius: 8, textAlign: 'center' }}>
+                    <div style={{ fontSize: 11, color: '#6b7280' }}>State Avg Occupancy</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: '#374151' }}>
+                      {marketAnalysis.market_demand.state_avg_occupancy}%
+                    </div>
+                  </div>
+                  <div style={{ padding: 12, background: marketAnalysis.market_demand.occupancy_vs_state >= 0 ? '#f0fdf4' : '#fef2f2', borderRadius: 8, textAlign: 'center' }}>
+                    <div style={{ fontSize: 11, color: '#6b7280' }}>vs State Avg</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: marketAnalysis.market_demand.occupancy_vs_state >= 0 ? '#059669' : '#dc2626' }}>
+                      {marketAnalysis.market_demand.occupancy_vs_state > 0 ? '+' : ''}{marketAnalysis.market_demand.occupancy_vs_state}%
+                    </div>
+                  </div>
+                  <div style={{ padding: 12, background: '#eff6ff', borderRadius: 8, textAlign: 'center' }}>
+                    <div style={{ fontSize: 11, color: '#6b7280' }}>Stabilized Target</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: '#2563eb' }}>
+                      {marketAnalysis.market_demand.stabilized_occupancy_target}%
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        {expandedSections.market && !marketAnalysis && (
+          <div style={{ marginTop: 16, textAlign: 'center', padding: 40, color: '#737373' }}>
+            <MapPin size={40} style={{ marginBottom: 12, opacity: 0.5 }} />
+            <p>No market analysis available. Run comprehensive analysis to generate.</p>
+          </div>
+        )}
+      </div>
+
+      {/* Property Research */}
+      <div className="card">
+        <div onClick={() => toggleSection('property')} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h3 className="card-title" style={{ marginBottom: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Building2 size={18} />
+            Property Research
+            {propertyResearch?.summary?.high_risk_properties > 0 && (
+              <span style={{ background: '#fee2e2', color: '#991b1b', padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600 }}>
+                {propertyResearch.summary.high_risk_properties} High Risk
+              </span>
+            )}
+          </h3>
+          {expandedSections.property ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+        </div>
+
+        {expandedSections.property && propertyResearch && (
+          <div style={{ marginTop: 16 }}>
+            {/* Summary */}
+            {propertyResearch.summary && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
+                <div style={{ padding: 12, background: '#f0fdf4', borderRadius: 8, textAlign: 'center' }}>
+                  <div style={{ fontSize: 11, color: '#6b7280' }}>Found in CMS</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: '#059669' }}>
+                    {propertyResearch.summary.properties_found_in_cms || 0}
+                  </div>
+                </div>
+                <div style={{ padding: 12, background: '#fef3c7', borderRadius: 8, textAlign: 'center' }}>
+                  <div style={{ fontSize: 11, color: '#6b7280' }}>Avg Star Rating</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                    {propertyResearch.summary.average_star_rating || '-'}
+                    <Star size={16} fill="#f59e0b" color="#f59e0b" />
+                  </div>
+                </div>
+                <div style={{ padding: 12, background: '#fee2e2', borderRadius: 8, textAlign: 'center' }}>
+                  <div style={{ fontSize: 11, color: '#6b7280' }}>Total Deficiencies</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: '#dc2626' }}>
+                    {propertyResearch.summary.total_deficiencies || 0}
+                  </div>
+                </div>
+                <div style={{ padding: 12, background: '#fef2f2', borderRadius: 8, textAlign: 'center' }}>
+                  <div style={{ fontSize: 11, color: '#6b7280' }}>Total Fines</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: '#dc2626' }}>
+                    {formatCurrency(propertyResearch.summary.total_fines || 0)}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Aggregate Risk Indicators */}
+            {propertyResearch.aggregate_risk_indicators?.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontWeight: 600, marginBottom: 12, color: '#374151', fontSize: 14 }}>Portfolio Risk Indicators</div>
+                {propertyResearch.aggregate_risk_indicators.map((risk, i) => (
+                  <div key={i} style={{
+                    padding: 12,
+                    marginBottom: 8,
+                    borderRadius: 8,
+                    background: risk.severity === 'high' ? '#fee2e2' : '#fef3c7',
+                    border: `1px solid ${risk.severity === 'high' ? '#fecaca' : '#fde68a'}`
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontWeight: 600, color: risk.severity === 'high' ? '#991b1b' : '#92400e' }}>
+                          {risk.indicator}
+                        </div>
+                        <div style={{ fontSize: 13, color: '#525252' }}>{risk.description}</div>
+                      </div>
+                      <span style={{
+                        padding: '4px 10px',
+                        borderRadius: 12,
+                        fontSize: 11,
+                        fontWeight: 600,
+                        textTransform: 'uppercase',
+                        background: risk.severity === 'high' ? '#991b1b' : '#92400e',
+                        color: 'white'
+                      }}>
+                        {risk.severity}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Individual Properties */}
+            {propertyResearch.properties?.length > 0 && (
+              <div>
+                <div style={{ fontWeight: 600, marginBottom: 12, color: '#374151', fontSize: 14 }}>Property Details</div>
+                {propertyResearch.properties.map((prop, i) => (
+                  <div key={i} style={{ padding: 16, background: '#f9fafb', borderRadius: 8, marginBottom: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 14 }}>{prop.property_name}</div>
+                        <div style={{ fontSize: 12, color: '#6b7280' }}>{prop.address}, {prop.city}, {prop.state}</div>
+                      </div>
+                      {prop.cms_data?.found && prop.cms_data?.ratings?.overall && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          {[1, 2, 3, 4, 5].map(s => (
+                            <Star key={s} size={14} fill={s <= prop.cms_data.ratings.overall ? '#f59e0b' : 'transparent'} color={s <= prop.cms_data.ratings.overall ? '#f59e0b' : '#d4d4d4'} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {prop.cms_data?.found && (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, fontSize: 12 }}>
+                        {prop.cms_data.provider_info?.beds && (
+                          <div><span style={{ color: '#6b7280' }}>Beds:</span> <strong>{prop.cms_data.provider_info.beds}</strong></div>
+                        )}
+                        {prop.cms_data.health_inspections?.total_deficiencies != null && (
+                          <div><span style={{ color: '#6b7280' }}>Deficiencies:</span> <strong style={{ color: prop.cms_data.health_inspections.total_deficiencies > 10 ? '#dc2626' : 'inherit' }}>{prop.cms_data.health_inspections.total_deficiencies}</strong></div>
+                        )}
+                        {prop.cms_data.penalties?.fines_total && (
+                          <div><span style={{ color: '#6b7280' }}>Fines:</span> <strong style={{ color: '#dc2626' }}>{formatCurrency(prop.cms_data.penalties.fines_total)}</strong></div>
+                        )}
+                        {prop.cms_data.provider_info?.ownership_type && (
+                          <div><span style={{ color: '#6b7280' }}>Ownership:</span> <strong>{prop.cms_data.provider_info.ownership_type}</strong></div>
+                        )}
+                      </div>
+                    )}
+
+                    {prop.risk_indicators?.length > 0 && (
+                      <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {prop.risk_indicators.map((risk, j) => (
+                          <span key={j} style={{
+                            padding: '4px 8px',
+                            borderRadius: 4,
+                            fontSize: 11,
+                            background: risk.severity === 'high' ? '#fee2e2' : '#fef3c7',
+                            color: risk.severity === 'high' ? '#991b1b' : '#92400e'
+                          }}>
+                            ⚠️ {risk.indicator}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             )}
           </div>
-        ) : (
-          <div style={{ textAlign: 'center', padding: 40, color: '#737373' }}>
-            <Shield size={40} style={{ marginBottom: 12, opacity: 0.5 }} />
-            <p>No scorecard calculated yet. Run full analysis to generate.</p>
+        )}
+        {expandedSections.property && !propertyResearch && (
+          <div style={{ marginTop: 16, textAlign: 'center', padding: 40, color: '#737373' }}>
+            <Building2 size={40} style={{ marginBottom: 12, opacity: 0.5 }} />
+            <p>No property research available. Run comprehensive analysis to generate.</p>
+          </div>
+        )}
+      </div>
+
+      {/* Deep Financial Analysis */}
+      <div className="card">
+        <div onClick={() => toggleSection('financials')} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h3 className="card-title" style={{ marginBottom: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <DollarSign size={18} />
+            Deep Financial Analysis
+          </h3>
+          {expandedSections.financials ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+        </div>
+
+        {expandedSections.financials && deepFinancials && (
+          <div style={{ marginTop: 16 }}>
+            {/* Summary Metrics */}
+            {deepFinancials.summary && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
+                <div style={{ padding: 16, background: '#f0fdf4', borderRadius: 8, textAlign: 'center' }}>
+                  <div style={{ fontSize: 11, color: '#6b7280' }}>Total Revenue</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: '#059669' }}>
+                    {formatCurrency(deepFinancials.summary.total_revenue)}
+                  </div>
+                </div>
+                <div style={{ padding: 16, background: '#eff6ff', borderRadius: 8, textAlign: 'center' }}>
+                  <div style={{ fontSize: 11, color: '#6b7280' }}>EBITDAR</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: '#2563eb' }}>
+                    {formatCurrency(deepFinancials.summary.ebitdar)}
+                  </div>
+                </div>
+                <div style={{ padding: 16, background: '#faf5ff', borderRadius: 8, textAlign: 'center' }}>
+                  <div style={{ fontSize: 11, color: '#6b7280' }}>EBITDAR Margin</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: '#7c3aed' }}>
+                    {deepFinancials.summary.ebitdar_margin}%
+                  </div>
+                </div>
+                {deepFinancials.summary.rent_coverage && (
+                  <div style={{ padding: 16, background: deepFinancials.summary.rent_coverage >= 1.25 ? '#f0fdf4' : '#fee2e2', borderRadius: 8, textAlign: 'center' }}>
+                    <div style={{ fontSize: 11, color: '#6b7280' }}>Rent Coverage</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: deepFinancials.summary.rent_coverage >= 1.25 ? '#059669' : '#dc2626' }}>
+                      {deepFinancials.summary.rent_coverage}x
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Benchmarks */}
+            {deepFinancials.benchmarks && Object.keys(deepFinancials.benchmarks).length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontWeight: 600, marginBottom: 12, color: '#374151', fontSize: 14 }}>Performance vs Benchmarks</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+                  {Object.entries(deepFinancials.benchmarks).map(([key, data]) => (
+                    <div key={key} style={{ padding: 12, background: '#f9fafb', borderRadius: 8 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <span style={{ fontSize: 13, fontWeight: 500 }}>{key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</span>
+                        <span style={{
+                          padding: '2px 8px',
+                          borderRadius: 4,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          background: getRatingColor(data.rating) + '20',
+                          color: getRatingColor(data.rating)
+                        }}>
+                          {data.rating?.toUpperCase() || 'N/A'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 12, color: '#6b7280' }}>
+                        Current: <strong>{typeof data.value === 'number' ? (data.value * 100).toFixed(1) + '%' : data.value}</strong>
+                        {data.benchmark_good && (
+                          <span style={{ marginLeft: 8 }}>| Good: {(data.benchmark_good * 100).toFixed(0)}%</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* PPD Metrics */}
+            {deepFinancials.ppd_metrics && !deepFinancials.ppd_metrics.error && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontWeight: 600, marginBottom: 12, color: '#374151', fontSize: 14 }}>Per Patient Day Metrics</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+                  {deepFinancials.ppd_metrics.revenue_ppd && (
+                    <div style={{ padding: 12, background: '#f0fdf4', borderRadius: 8, textAlign: 'center' }}>
+                      <div style={{ fontSize: 11, color: '#6b7280' }}>Revenue PPD</div>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: '#059669' }}>
+                        ${deepFinancials.ppd_metrics.revenue_ppd}
+                      </div>
+                    </div>
+                  )}
+                  {deepFinancials.ppd_metrics.expenses_ppd && (
+                    <div style={{ padding: 12, background: '#fef2f2', borderRadius: 8, textAlign: 'center' }}>
+                      <div style={{ fontSize: 11, color: '#6b7280' }}>Expenses PPD</div>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: '#dc2626' }}>
+                        ${deepFinancials.ppd_metrics.expenses_ppd}
+                      </div>
+                    </div>
+                  )}
+                  {deepFinancials.ppd_metrics.ebitdar_ppd && (
+                    <div style={{ padding: 12, background: '#eff6ff', borderRadius: 8, textAlign: 'center' }}>
+                      <div style={{ fontSize: 11, color: '#6b7280' }}>EBITDAR PPD</div>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: '#2563eb' }}>
+                        ${deepFinancials.ppd_metrics.ebitdar_ppd}
+                      </div>
+                    </div>
+                  )}
+                  {deepFinancials.ppd_metrics.patient_days && (
+                    <div style={{ padding: 12, background: '#f9fafb', borderRadius: 8, textAlign: 'center' }}>
+                      <div style={{ fontSize: 11, color: '#6b7280' }}>Annual Patient Days</div>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: '#374151' }}>
+                        {formatNumber(Math.round(deepFinancials.ppd_metrics.patient_days))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Breakeven Analysis */}
+            {deepFinancials.breakeven && !deepFinancials.breakeven.error && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontWeight: 600, marginBottom: 12, color: '#374151', fontSize: 14 }}>Breakeven Analysis</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+                  <div style={{ padding: 12, background: '#f9fafb', borderRadius: 8, textAlign: 'center' }}>
+                    <div style={{ fontSize: 11, color: '#6b7280' }}>Current Occupancy</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: '#374151' }}>
+                      {deepFinancials.breakeven.current_occupancy}%
+                    </div>
+                  </div>
+                  <div style={{ padding: 12, background: '#fef3c7', borderRadius: 8, textAlign: 'center' }}>
+                    <div style={{ fontSize: 11, color: '#6b7280' }}>Breakeven Occupancy</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: '#d97706' }}>
+                      {deepFinancials.breakeven.breakeven_occupancy}%
+                    </div>
+                  </div>
+                  <div style={{ padding: 12, background: deepFinancials.breakeven.cushion_above_breakeven > 10 ? '#f0fdf4' : '#fee2e2', borderRadius: 8, textAlign: 'center' }}>
+                    <div style={{ fontSize: 11, color: '#6b7280' }}>Cushion Above Breakeven</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: deepFinancials.breakeven.cushion_above_breakeven > 10 ? '#059669' : '#dc2626' }}>
+                      +{deepFinancials.breakeven.cushion_above_breakeven}%
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Key Findings */}
+            {deepFinancials.key_findings?.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontWeight: 600, marginBottom: 12, color: '#374151', fontSize: 14 }}>Key Findings</div>
+                {deepFinancials.key_findings.map((finding, i) => (
+                  <div key={i} style={{
+                    padding: 12,
+                    marginBottom: 8,
+                    borderRadius: 8,
+                    background: finding.type === 'concern' ? '#fee2e2' : '#f0fdf4',
+                    border: `1px solid ${finding.type === 'concern' ? '#fecaca' : '#bbf7d0'}`
+                  }}>
+                    <div style={{ fontWeight: 600, color: finding.type === 'concern' ? '#991b1b' : '#166534', marginBottom: 4 }}>
+                      {finding.type === 'concern' ? '⚠️' : '✅'} {finding.finding}
+                    </div>
+                    <div style={{ fontSize: 13, color: '#525252', marginBottom: 4 }}>{finding.implication}</div>
+                    <div style={{ fontSize: 12, color: '#6b7280', fontStyle: 'italic' }}>💡 {finding.action}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Opportunities */}
+            {deepFinancials.opportunities?.length > 0 && (
+              <div>
+                <div style={{ fontWeight: 600, marginBottom: 12, color: '#374151', fontSize: 14 }}>Improvement Opportunities</div>
+                {deepFinancials.opportunities.map((opp, i) => (
+                  <div key={i} style={{ padding: 12, marginBottom: 8, borderRadius: 8, background: '#ecfdf5', border: '1px solid #a7f3d0' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontWeight: 600, color: '#065f46' }}>{opp.type?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</div>
+                        <div style={{ fontSize: 13, color: '#525252' }}>{opp.description}</div>
+                      </div>
+                      {opp.potential_savings > 0 && (
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: 11, color: '#6b7280' }}>Potential Savings</div>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: '#059669' }}>
+                            {formatCurrency(opp.potential_savings)}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {expandedSections.financials && !deepFinancials && (
+          <div style={{ marginTop: 16, textAlign: 'center', padding: 40, color: '#737373' }}>
+            <DollarSign size={40} style={{ marginBottom: 12, opacity: 0.5 }} />
+            <p>No deep financial analysis available. Run comprehensive analysis to generate.</p>
           </div>
         )}
       </div>
 
       {/* Risk Flags */}
       <div className="card">
-        <h3 className="card-title" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <AlertTriangle size={18} />
-          Risk Flags ({riskFlags.length})
-        </h3>
+        <div onClick={() => toggleSection('risks')} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h3 className="card-title" style={{ marginBottom: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <AlertTriangle size={18} />
+            Risk Flags ({riskFlags.length})
+          </h3>
+          {expandedSections.risks ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+        </div>
 
-        {riskFlags.length > 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {riskFlags.map(flag => {
-              const style = getSeverityStyle(flag.severity)
-              return (
-                <div key={flag.id} style={{
-                  padding: 14,
-                  background: style.bg,
-                  border: `1px solid ${style.border}`,
-                  borderRadius: 8
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-                    <div>
-                      <div style={{ fontWeight: 600, color: style.color, marginBottom: 4 }}>{flag.title}</div>
-                      <div style={{ fontSize: 13, color: '#525252', marginBottom: 8 }}>{flag.description}</div>
-                      {flag.recommendation && (
-                        <div style={{ fontSize: 12, color: '#737373', fontStyle: 'italic' }}>
-                          💡 {flag.recommendation}
-                        </div>
-                      )}
-                    </div>
-                    <span style={{
-                      padding: '4px 10px',
-                      borderRadius: 12,
-                      fontSize: 11,
-                      fontWeight: 600,
-                      textTransform: 'uppercase',
-                      background: style.color,
-                      color: 'white'
+        {expandedSections.risks && (
+          <div style={{ marginTop: 16 }}>
+            {riskFlags.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {riskFlags.map(flag => {
+                  const style = getSeverityStyle(flag.severity)
+                  return (
+                    <div key={flag.id} style={{
+                      padding: 14,
+                      background: style.bg,
+                      border: `1px solid ${style.border}`,
+                      borderRadius: 8
                     }}>
-                      {flag.severity}
-                    </span>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        ) : (
-          <div style={{ textAlign: 'center', padding: 40, color: '#737373' }}>
-            <CheckCircle size={40} style={{ marginBottom: 12, opacity: 0.5, color: '#059669' }} />
-            <p>No risk flags identified</p>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                        <div>
+                          <div style={{ fontWeight: 600, color: style.color, marginBottom: 4 }}>{flag.title}</div>
+                          <div style={{ fontSize: 13, color: '#525252', marginBottom: 8 }}>{flag.description}</div>
+                          {flag.recommendation && (
+                            <div style={{ fontSize: 12, color: '#737373', fontStyle: 'italic' }}>
+                              💡 {flag.recommendation}
+                            </div>
+                          )}
+                        </div>
+                        <span style={{
+                          padding: '4px 10px',
+                          borderRadius: 12,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          textTransform: 'uppercase',
+                          background: style.color,
+                          color: 'white'
+                        }}>
+                          {flag.severity}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', padding: 40, color: '#737373' }}>
+                <CheckCircle size={40} style={{ marginBottom: 12, opacity: 0.5, color: '#059669' }} />
+                <p>No risk flags identified</p>
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* Financial Summary */}
-      {financials?.metrics && Object.keys(financials.metrics).length > 0 && (
-        <div className="card">
-          <h3 className="card-title" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <DollarSign size={18} />
-            Financial Summary
-          </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
-            {financials.metrics.total_revenue > 0 && (
-              <div style={{ padding: 16, background: '#f0fdf4', borderRadius: 8, textAlign: 'center' }}>
-                <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>Total Revenue</div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: '#059669' }}>
-                  {formatCurrency(financials.metrics.total_revenue)}
-                </div>
-              </div>
-            )}
-            {financials.metrics.ebitdar > 0 && (
-              <div style={{ padding: 16, background: '#eff6ff', borderRadius: 8, textAlign: 'center' }}>
-                <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>EBITDAR</div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: '#2563eb' }}>
-                  {formatCurrency(financials.metrics.ebitdar)}
-                </div>
-              </div>
-            )}
-            {financials.metrics.ebitdar_margin > 0 && (
-              <div style={{ padding: 16, background: '#faf5ff', borderRadius: 8, textAlign: 'center' }}>
-                <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>EBITDAR Margin</div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: '#7c3aed' }}>
-                  {formatPercent(financials.metrics.ebitdar_margin)}
-                </div>
-              </div>
-            )}
-            {financials.metrics.labor_ratio > 0 && (
-              <div style={{ padding: 16, background: '#fff7ed', borderRadius: 8, textAlign: 'center' }}>
-                <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>Labor Ratio</div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: '#ea580c' }}>
-                  {formatPercent(financials.metrics.labor_ratio)}
-                </div>
-              </div>
-            )}
-            {financials.metrics.total_opex > 0 && (
-              <div style={{ padding: 16, background: '#fef2f2', borderRadius: 8, textAlign: 'center' }}>
-                <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>Total OpEx</div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: '#dc2626' }}>
-                  {formatCurrency(financials.metrics.total_opex)}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Claims Summary */}
+      {/* Claims */}
       {claims.length > 0 && (
         <div className="card">
-          <h3 className="card-title" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <FileSearch size={18} />
-            OM Claims ({claims.length})
-          </h3>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-              <thead>
-                <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
-                  <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Type</th>
-                  <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Claimed</th>
-                  <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Verified</th>
-                  <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Variance</th>
-                  <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {claims.slice(0, 10).map(claim => (
-                  <tr key={claim.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                    <td style={{ padding: '10px 12px' }}>
-                      <span style={{ fontWeight: 500 }}>{claim.claim_type}</span>
-                      <div style={{ fontSize: 11, color: '#6b7280' }}>{claim.claim_category}</div>
-                    </td>
-                    <td style={{ padding: '10px 12px' }}>{claim.claimed_value || '-'}</td>
-                    <td style={{ padding: '10px 12px' }}>{claim.verified_value || '-'}</td>
-                    <td style={{ padding: '10px 12px' }}>
-                      {claim.variance_pct != null ? (
-                        <span style={{ color: Math.abs(claim.variance_pct) > 10 ? '#dc2626' : '#059669' }}>
-                          {claim.variance_pct > 0 ? '+' : ''}{claim.variance_pct.toFixed(1)}%
-                        </span>
-                      ) : '-'}
-                    </td>
-                    <td style={{ padding: '10px 12px' }}>
-                      <span style={{
-                        padding: '2px 8px',
-                        borderRadius: 4,
-                        fontSize: 11,
-                        fontWeight: 500,
-                        background: claim.verification_status === 'verified' ? '#dcfce7' :
-                                   claim.verification_status === 'flagged' ? '#fee2e2' :
-                                   claim.verification_status === 'disputed' ? '#fef3c7' : '#f3f4f6',
-                        color: claim.verification_status === 'verified' ? '#166534' :
-                               claim.verification_status === 'flagged' ? '#991b1b' :
-                               claim.verification_status === 'disputed' ? '#92400e' : '#374151'
-                      }}>
-                        {claim.verification_status}
-                      </span>
-                      {claim.is_red_flag && (
-                        <AlertTriangle size={14} color="#dc2626" style={{ marginLeft: 6 }} />
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {claims.length > 10 && (
-              <div style={{ padding: 12, textAlign: 'center', color: '#6b7280', fontSize: 12 }}>
-                Showing 10 of {claims.length} claims
-              </div>
-            )}
+          <div onClick={() => toggleSection('claims')} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <h3 className="card-title" style={{ marginBottom: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <FileSearch size={18} />
+              OM Claims ({claims.length})
+            </h3>
+            {expandedSections.claims ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
           </div>
+
+          {expandedSections.claims && (
+            <div style={{ marginTop: 16, overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Type</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Claimed</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Verified</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Variance</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {claims.slice(0, 10).map(claim => (
+                    <tr key={claim.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                      <td style={{ padding: '10px 12px' }}>
+                        <span style={{ fontWeight: 500 }}>{claim.claim_type}</span>
+                        <div style={{ fontSize: 11, color: '#6b7280' }}>{claim.claim_category}</div>
+                      </td>
+                      <td style={{ padding: '10px 12px' }}>{claim.claimed_value || '-'}</td>
+                      <td style={{ padding: '10px 12px' }}>{claim.verified_value || '-'}</td>
+                      <td style={{ padding: '10px 12px' }}>
+                        {claim.variance_pct != null ? (
+                          <span style={{ color: Math.abs(claim.variance_pct) > 10 ? '#dc2626' : '#059669' }}>
+                            {claim.variance_pct > 0 ? '+' : ''}{claim.variance_pct.toFixed(1)}%
+                          </span>
+                        ) : '-'}
+                      </td>
+                      <td style={{ padding: '10px 12px' }}>
+                        <span style={{
+                          padding: '2px 8px',
+                          borderRadius: 4,
+                          fontSize: 11,
+                          fontWeight: 500,
+                          background: claim.verification_status === 'verified' ? '#dcfce7' :
+                                     claim.verification_status === 'flagged' ? '#fee2e2' :
+                                     claim.verification_status === 'disputed' ? '#fef3c7' : '#f3f4f6',
+                          color: claim.verification_status === 'verified' ? '#166534' :
+                                 claim.verification_status === 'flagged' ? '#991b1b' :
+                                 claim.verification_status === 'disputed' ? '#92400e' : '#374151'
+                        }}>
+                          {claim.verification_status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
@@ -1790,6 +2266,16 @@ function Analysis({ deal }) {
           >
             <FileText size={14} />
             IC Memo (HTML)
+          </a>
+          <a
+            href={`/api/deals/${deal.id}/export/proforma.csv`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-primary"
+            style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            <FileText size={14} />
+            Pro Forma Template (CSV)
           </a>
           <a
             href={`/api/deals/${deal.id}/export/data.json`}

@@ -30,6 +30,15 @@ export const getAnalysisJobs = async (dealId) => (await api.get('/deals/' + deal
 export const verifyClaims = async (dealId) => (await api.post('/deals/' + dealId + '/verify-claims')).data
 export const analyzeDocumentFull = async (docId) => (await api.post('/documents/' + docId + '/analyze-full')).data
 
+// Enhanced analysis endpoints
+export const getMarketAnalysis = async (dealId) => (await api.get('/deals/' + dealId + '/market-analysis')).data
+export const runMarketAnalysis = async (dealId) => (await api.post('/deals/' + dealId + '/market-analysis')).data
+export const getPropertyResearch = async (dealId) => (await api.get('/deals/' + dealId + '/property-research')).data
+export const runPropertyResearch = async (dealId) => (await api.post('/deals/' + dealId + '/property-research')).data
+export const getDeepFinancialAnalysis = async (dealId) => (await api.get('/deals/' + dealId + '/deep-financial-analysis')).data
+export const runDeepFinancialAnalysis = async (dealId) => (await api.post('/deals/' + dealId + '/deep-financial-analysis')).data
+export const runComprehensiveAnalysis = async (dealId) => (await api.post('/deals/' + dealId + '/comprehensive-analysis')).data
+
 export const formatCurrency = (v) => v ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(v) : '-'
 export const formatNumber = (v) => v ? new Intl.NumberFormat('en-US').format(v) : '-'
 export const formatPercent = (v) => v != null ? v.toFixed(1) + '%' : '-'
