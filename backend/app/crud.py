@@ -108,13 +108,33 @@ def get_documents(db: Session, deal_id: int):
 def get_document(db: Session, doc_id: int):
     return db.query(models.Document).filter(models.Document.id == doc_id).first()
 
-def create_document(db: Session, deal_id: int, doc: schemas.DocumentCreate):
-    db_doc = models.Document(deal_id=deal_id, **doc.model_dump())
+def create_document(db: Session, deal_id: int, doc: schemas.DocumentCreate, property_id: int = None):
+    doc_data = doc.model_dump()
+    db_doc = models.Document(deal_id=deal_id, property_id=property_id, **doc_data)
     db.add(db_doc)
     db.commit()
     db.refresh(db_doc)
-    log_activity(db, deal_id, "document_uploaded", f"Document '{doc.original_filename}' uploaded")
     return db_doc
+
+
+def update_document_parsing_status(db: Session, doc_id: int, status: str, error: str = None):
+    """Update document parsing status"""
+    doc = db.query(models.Document).filter(models.Document.id == doc_id).first()
+    if doc:
+        doc.parsing_status = status
+        if error:
+            doc.parsing_error = error
+        db.commit()
+        db.refresh(doc)
+    return doc
+
+
+def get_document_by_checksum(db: Session, deal_id: int, checksum: str):
+    """Find document by checksum within a deal"""
+    return db.query(models.Document).filter(
+        models.Document.deal_id == deal_id,
+        models.Document.checksum == checksum
+    ).first()
 
 def update_doc_analysis(db: Session, doc_id: int, summary: str):
     doc = db.query(models.Document).filter(models.Document.id == doc_id).first()
@@ -184,3 +204,350 @@ def calc_valuation(deal):
             v["summary"]["spread_pct"] = round(spread, 2)
             v["summary"]["recommendation"] = "Potentially Undervalued" if spread > 10 else ("Potentially Overvalued" if spread < -10 else "Fair Value Range")
     return v
+
+
+# ============================================================================
+# DOCUMENT ANALYSIS CRUD
+# ============================================================================
+
+def create_parsed_artifact(db: Session, document_id: int, artifact_type: str,
+                          page_number: int = None, content: str = None,
+                          content_json: dict = None, confidence: float = None):
+    """Create a parsed artifact from document"""
+    artifact = models.ParsedArtifact(
+        document_id=document_id,
+        artifact_type=artifact_type,
+        page_number=page_number,
+        content=content,
+        content_json=content_json,
+        confidence=confidence
+    )
+    db.add(artifact)
+    db.commit()
+    db.refresh(artifact)
+    return artifact
+
+
+def get_parsed_artifacts(db: Session, document_id: int):
+    """Get all parsed artifacts for a document"""
+    return db.query(models.ParsedArtifact).filter(
+        models.ParsedArtifact.document_id == document_id
+    ).order_by(models.ParsedArtifact.page_number).all()
+
+
+def create_extracted_field(db: Session, document_id: int, deal_id: int,
+                          field_key: str, field_value: str, **kwargs):
+    """Create an extracted field with provenance"""
+    field = models.ExtractedField(
+        document_id=document_id,
+        deal_id=deal_id,
+        field_key=field_key,
+        field_value=field_value,
+        **kwargs
+    )
+    db.add(field)
+    db.commit()
+    db.refresh(field)
+    return field
+
+
+def get_extracted_fields(db: Session, deal_id: int, document_id: int = None):
+    """Get extracted fields for a deal, optionally filtered by document"""
+    query = db.query(models.ExtractedField).filter(
+        models.ExtractedField.deal_id == deal_id
+    )
+    if document_id:
+        query = query.filter(models.ExtractedField.document_id == document_id)
+    return query.order_by(models.ExtractedField.field_key).all()
+
+
+def update_extracted_field(db: Session, field_id: int, updates: dict, override_by: str = None):
+    """Update an extracted field and optionally log override"""
+    field = db.query(models.ExtractedField).filter(models.ExtractedField.id == field_id).first()
+    if not field:
+        return None
+
+    old_value = field.field_value
+
+    for k, v in updates.items():
+        if hasattr(field, k):
+            setattr(field, k, v)
+
+    # Log override if value changed and override_by provided
+    if override_by and 'field_value' in updates and updates['field_value'] != old_value:
+        override = models.FieldOverride(
+            deal_id=field.deal_id,
+            entity_type='extracted_field',
+            entity_id=field_id,
+            field_name='field_value',
+            old_value=old_value,
+            new_value=updates['field_value'],
+            overridden_by=override_by
+        )
+        db.add(override)
+
+    db.commit()
+    db.refresh(field)
+    return field
+
+
+def create_claim(db: Session, document_id: int, deal_id: int, claim_data: dict):
+    """Create a claim from OM/CIM document"""
+    claim = models.Claim(
+        document_id=document_id,
+        deal_id=deal_id,
+        **claim_data
+    )
+    db.add(claim)
+    db.commit()
+    db.refresh(claim)
+    return claim
+
+
+def get_claims(db: Session, deal_id: int, document_id: int = None, category: str = None):
+    """Get claims for a deal"""
+    query = db.query(models.Claim).filter(models.Claim.deal_id == deal_id)
+    if document_id:
+        query = query.filter(models.Claim.document_id == document_id)
+    if category:
+        query = query.filter(models.Claim.claim_category == category)
+    return query.order_by(models.Claim.claim_category, models.Claim.claim_type).all()
+
+
+def update_claim_verification(db: Session, claim_id: int, verification_data: dict, verified_by: str = None):
+    """Update claim verification status"""
+    claim = db.query(models.Claim).filter(models.Claim.id == claim_id).first()
+    if not claim:
+        return None
+
+    for k, v in verification_data.items():
+        if hasattr(claim, k):
+            setattr(claim, k, v)
+
+    # Calculate variance if verified_value provided
+    if verification_data.get('verified_value') and claim.numeric_value:
+        try:
+            verified_numeric = float(verification_data['verified_value'].replace(',', '').replace('$', ''))
+            claim.variance = verified_numeric - claim.numeric_value
+            if claim.numeric_value != 0:
+                claim.variance_pct = (claim.variance / abs(claim.numeric_value)) * 100
+        except:
+            pass
+
+    db.commit()
+    db.refresh(claim)
+    return claim
+
+
+def get_standard_accounts(db: Session, category: str = None):
+    """Get standard chart of accounts"""
+    query = db.query(models.StandardAccount).filter(models.StandardAccount.is_active == True)
+    if category:
+        query = query.filter(models.StandardAccount.category == category)
+    return query.order_by(models.StandardAccount.display_order).all()
+
+
+def create_coa_mapping(db: Session, deal_id: int, mapping_data: dict):
+    """Create a COA mapping"""
+    mapping = models.COAMapping(deal_id=deal_id, **mapping_data)
+    db.add(mapping)
+    db.commit()
+    db.refresh(mapping)
+    return mapping
+
+
+def get_coa_mappings(db: Session, deal_id: int, status: str = None):
+    """Get COA mappings for a deal"""
+    query = db.query(models.COAMapping).filter(models.COAMapping.deal_id == deal_id)
+    if status:
+        query = query.filter(models.COAMapping.mapping_status == status)
+    return query.order_by(models.COAMapping.seller_account_name).all()
+
+
+def approve_coa_mapping(db: Session, mapping_id: int, standard_account_id: int,
+                       standard_account_code: str, approved_by: str):
+    """Approve a COA mapping"""
+    mapping = db.query(models.COAMapping).filter(models.COAMapping.id == mapping_id).first()
+    if not mapping:
+        return None
+
+    mapping.standard_account_id = standard_account_id
+    mapping.standard_account_code = standard_account_code
+    mapping.mapping_status = 'approved'
+    mapping.approved_by = approved_by
+    mapping.approved_at = datetime.utcnow()
+    db.commit()
+    db.refresh(mapping)
+    return mapping
+
+
+def create_financial_line_item(db: Session, deal_id: int, line_data: dict):
+    """Create a financial line item"""
+    item = models.FinancialLineItem(deal_id=deal_id, **line_data)
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+def get_financial_line_items(db: Session, deal_id: int, period_type: str = None):
+    """Get financial line items for a deal"""
+    query = db.query(models.FinancialLineItem).filter(
+        models.FinancialLineItem.deal_id == deal_id
+    )
+    if period_type:
+        query = query.filter(models.FinancialLineItem.period_type == period_type)
+    return query.order_by(
+        models.FinancialLineItem.period_start,
+        models.FinancialLineItem.standard_account_code
+    ).all()
+
+
+def create_scenario(db: Session, deal_id: int, scenario_data: dict):
+    """Create a pro forma scenario"""
+    scenario = models.Scenario(deal_id=deal_id, **scenario_data)
+    db.add(scenario)
+    db.commit()
+    db.refresh(scenario)
+    return scenario
+
+
+def get_scenarios(db: Session, deal_id: int):
+    """Get all scenarios for a deal"""
+    return db.query(models.Scenario).filter(
+        models.Scenario.deal_id == deal_id
+    ).order_by(models.Scenario.created_at).all()
+
+
+def update_scenario(db: Session, scenario_id: int, updates: dict):
+    """Update a scenario"""
+    scenario = db.query(models.Scenario).filter(models.Scenario.id == scenario_id).first()
+    if not scenario:
+        return None
+
+    for k, v in updates.items():
+        if hasattr(scenario, k):
+            setattr(scenario, k, v)
+
+    db.commit()
+    db.refresh(scenario)
+    return scenario
+
+
+def create_risk_flag(db: Session, deal_id: int, risk_data: dict):
+    """Create a risk flag"""
+    risk = models.RiskFlag(deal_id=deal_id, **risk_data)
+    db.add(risk)
+    db.commit()
+    db.refresh(risk)
+    return risk
+
+
+def get_risk_flags(db: Session, deal_id: int, category: str = None, status: str = None):
+    """Get risk flags for a deal"""
+    query = db.query(models.RiskFlag).filter(models.RiskFlag.deal_id == deal_id)
+    if category:
+        query = query.filter(models.RiskFlag.risk_category == category)
+    if status:
+        query = query.filter(models.RiskFlag.status == status)
+    return query.order_by(
+        models.RiskFlag.severity.desc(),
+        models.RiskFlag.created_at.desc()
+    ).all()
+
+
+def update_risk_flag(db: Session, risk_id: int, updates: dict):
+    """Update a risk flag"""
+    risk = db.query(models.RiskFlag).filter(models.RiskFlag.id == risk_id).first()
+    if not risk:
+        return None
+
+    for k, v in updates.items():
+        if hasattr(risk, k):
+            setattr(risk, k, v)
+
+    if updates.get('status') in ['mitigated', 'accepted']:
+        risk.resolved_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(risk)
+    return risk
+
+
+def get_or_create_scorecard(db: Session, deal_id: int):
+    """Get or create deal scorecard"""
+    scorecard = db.query(models.DealScorecard).filter(
+        models.DealScorecard.deal_id == deal_id
+    ).first()
+
+    if not scorecard:
+        scorecard = models.DealScorecard(deal_id=deal_id)
+        db.add(scorecard)
+        db.commit()
+        db.refresh(scorecard)
+
+    return scorecard
+
+
+def update_scorecard(db: Session, deal_id: int, scores: dict):
+    """Update deal scorecard"""
+    scorecard = get_or_create_scorecard(db, deal_id)
+
+    for k, v in scores.items():
+        if hasattr(scorecard, k):
+            setattr(scorecard, k, v)
+
+    db.commit()
+    db.refresh(scorecard)
+    return scorecard
+
+
+def create_analysis_job(db: Session, job_type: str, deal_id: int = None, document_id: int = None):
+    """Create an analysis job"""
+    job = models.AnalysisJob(
+        job_type=job_type,
+        deal_id=deal_id,
+        document_id=document_id,
+        status='pending'
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def update_analysis_job(db: Session, job_id: int, status: str, progress: int = None,
+                       error: str = None, result: dict = None):
+    """Update analysis job status"""
+    job = db.query(models.AnalysisJob).filter(models.AnalysisJob.id == job_id).first()
+    if not job:
+        return None
+
+    job.status = status
+    if progress is not None:
+        job.progress = progress
+    if error:
+        job.error_message = error
+    if result:
+        job.result = result
+
+    if status == 'running' and not job.started_at:
+        job.started_at = datetime.utcnow()
+    elif status in ['completed', 'failed']:
+        job.completed_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def get_analysis_jobs(db: Session, deal_id: int = None, document_id: int = None, status: str = None):
+    """Get analysis jobs"""
+    query = db.query(models.AnalysisJob)
+    if deal_id:
+        query = query.filter(models.AnalysisJob.deal_id == deal_id)
+    if document_id:
+        query = query.filter(models.AnalysisJob.document_id == document_id)
+    if status:
+        query = query.filter(models.AnalysisJob.status == status)
+    return query.order_by(models.AnalysisJob.created_at.desc()).all()
