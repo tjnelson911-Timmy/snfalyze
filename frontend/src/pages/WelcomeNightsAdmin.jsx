@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Routes, Route, NavLink, useNavigate } from 'react-router-dom'
-import { FileText, Gamepad2, Building2, Image, Plus, Edit2, Trash2, Save, X, Upload, Download } from 'lucide-react'
+import { FileText, Gamepad2, Building2, Image, Plus, Edit2, Trash2, Save, X, Upload, Download, FileBox } from 'lucide-react'
 import {
   getWNBrands,
   getWNContent,
@@ -18,7 +18,10 @@ import {
   deleteFacilityLogo,
   getWNAssets,
   uploadWNAsset,
-  deleteWNAsset
+  deleteWNAsset,
+  getWNTemplates,
+  uploadWNTemplate,
+  deleteWNTemplate
 } from '../services/api'
 
 function WelcomeNightsAdmin() {
@@ -48,6 +51,10 @@ function WelcomeNightsAdmin() {
           <Image size={16} style={{ marginRight: 6 }} />
           Assets
         </NavLink>
+        <NavLink to="/admin/welcome-nights/templates" className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}>
+          <FileBox size={16} style={{ marginRight: 6 }} />
+          Templates
+        </NavLink>
       </div>
 
       <Routes>
@@ -56,6 +63,7 @@ function WelcomeNightsAdmin() {
         <Route path="/games" element={<GamesAdmin />} />
         <Route path="/facilities" element={<FacilitiesAdmin />} />
         <Route path="/assets" element={<AssetsAdmin />} />
+        <Route path="/templates" element={<TemplatesAdmin />} />
       </Routes>
     </div>
   )
@@ -681,6 +689,138 @@ function AssetsAdmin() {
             </div>
           ))}
           {assets.length === 0 && <p className="text-muted">No assets uploaded yet</p>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Templates Admin - Upload reference PPTX templates
+function TemplatesAdmin() {
+  const [templates, setTemplates] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [uploading, setUploading] = useState(false)
+
+  useEffect(() => { loadTemplates() }, [])
+
+  const loadTemplates = async () => {
+    setLoading(true)
+    try {
+      const data = await getWNTemplates()
+      setTemplates(data)
+    } catch (err) {
+      console.error('Error loading templates:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    setUploading(true)
+    try {
+      await uploadWNTemplate(file)
+      loadTemplates()
+    } catch (err) {
+      alert('Error uploading template: ' + (err.response?.data?.detail || err.message))
+    } finally {
+      setUploading(false)
+      e.target.value = ''
+    }
+  }
+
+  const handleDelete = async (filename) => {
+    if (!window.confirm('Delete this template?')) return
+    try {
+      await deleteWNTemplate(filename)
+      loadTemplates()
+    } catch (err) {
+      alert('Error deleting template')
+    }
+  }
+
+  const formatFileSize = (bytes) => {
+    if (bytes < 1024) return bytes + ' B'
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+  }
+
+  const formatDate = (isoString) => {
+    return new Date(isoString).toLocaleString()
+  }
+
+  return (
+    <div>
+      <div className="wn-admin-section-header">
+        <div>
+          <h3 className="wn-admin-section-title">PowerPoint Templates</h3>
+          <p style={{ color: '#6b7280', fontSize: 14, marginTop: 4 }}>
+            Upload your existing Culture Night PowerPoint templates as reference for improving the generated presentations.
+          </p>
+        </div>
+        <label className="btn btn-primary" style={{ cursor: 'pointer' }}>
+          <Upload size={16} /> {uploading ? 'Uploading...' : 'Upload Template'}
+          <input
+            type="file"
+            accept=".pptx,.ppt"
+            onChange={handleUpload}
+            style={{ display: 'none' }}
+            disabled={uploading}
+          />
+        </label>
+      </div>
+
+      {loading ? <p>Loading...</p> : (
+        <div style={{ marginTop: 24 }}>
+          {templates.length === 0 ? (
+            <div className="card" style={{ textAlign: 'center', padding: 40 }}>
+              <FileBox size={48} style={{ color: '#d1d5db', marginBottom: 16 }} />
+              <p style={{ color: '#6b7280', marginBottom: 16 }}>No templates uploaded yet</p>
+              <p style={{ color: '#9ca3af', fontSize: 14 }}>
+                Upload your current Culture Night PowerPoint template (.pptx) so we can use it as a reference.
+              </p>
+            </div>
+          ) : (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Filename</th>
+                  <th>Size</th>
+                  <th>Uploaded</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {templates.map(t => (
+                  <tr key={t.filename}>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <FileBox size={20} style={{ color: '#f97316' }} />
+                        <strong>{t.filename}</strong>
+                      </div>
+                    </td>
+                    <td>{formatFileSize(t.size)}</td>
+                    <td>{formatDate(t.uploaded_at)}</td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <a
+                          href={`http://localhost:8000${t.url}`}
+                          download
+                          className="btn btn-sm btn-secondary"
+                        >
+                          <Download size={14} /> Download
+                        </a>
+                        <button className="btn btn-sm btn-danger" onClick={() => handleDelete(t.filename)}>
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
     </div>

@@ -74,6 +74,15 @@ export const uploadFacilityLogo = async (facilityId, file) => {
 }
 export const deleteFacilityLogo = async (facilityId) => (await api.delete(`/wn/facilities/${facilityId}/logo`)).data
 
+// Templates
+export const getWNTemplates = async () => (await api.get('/wn/templates')).data
+export const uploadWNTemplate = async (file) => {
+  const fd = new FormData()
+  fd.append('file', file)
+  return (await api.post('/wn/templates', fd, { headers: { 'Content-Type': 'multipart/form-data' } })).data
+}
+export const deleteWNTemplate = async (filename) => (await api.delete(`/wn/templates/${encodeURIComponent(filename)}`)).data
+
 // Assets
 export const getWNAssets = async (params = {}) => (await api.get('/wn/assets', { params })).data
 export const uploadWNAsset = async (brandId, assetType, file) => {

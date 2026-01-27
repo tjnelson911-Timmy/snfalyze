@@ -1419,6 +1419,79 @@ def delete_facility_logo(facility_id: int, db: Session = Depends(get_db)):
     return {"message": "Logo removed"}
 
 
+# Template upload directory
+WN_TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "wn_templates")
+os.makedirs(WN_TEMPLATES_DIR, exist_ok=True)
+
+
+@app.get("/api/wn/templates")
+def get_templates():
+    """Get list of uploaded PPTX templates"""
+    templates = []
+    if os.path.exists(WN_TEMPLATES_DIR):
+        for fname in os.listdir(WN_TEMPLATES_DIR):
+            if fname.endswith(('.pptx', '.ppt')):
+                fpath = os.path.join(WN_TEMPLATES_DIR, fname)
+                stat = os.stat(fpath)
+                templates.append({
+                    "filename": fname,
+                    "size": stat.st_size,
+                    "uploaded_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                    "url": f"/wn_templates/{fname}"
+                })
+    return sorted(templates, key=lambda x: x["uploaded_at"], reverse=True)
+
+
+@app.post("/api/wn/templates")
+async def upload_template(
+    file: UploadFile = File(...),
+    description: str = Form(None)
+):
+    """Upload a PPTX template for reference"""
+    ext = file.filename.split(".")[-1].lower()
+    if ext not in {"pptx", "ppt"}:
+        raise HTTPException(400, "Invalid file type. Please upload a PowerPoint file (.pptx or .ppt)")
+
+    content = await file.read()
+    # Preserve original filename but add timestamp to avoid conflicts
+    base_name = file.filename.rsplit(".", 1)[0]
+    fname = f"{base_name}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.{ext}"
+    file_path = os.path.join(WN_TEMPLATES_DIR, fname)
+
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    return {
+        "message": "Template uploaded",
+        "filename": fname,
+        "size": len(content),
+        "url": f"/wn_templates/{fname}"
+    }
+
+
+@app.delete("/api/wn/templates/{filename}")
+def delete_template(filename: str):
+    """Delete a template"""
+    file_path = os.path.join(WN_TEMPLATES_DIR, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(404, "Template not found")
+    os.remove(file_path)
+    return {"message": "Template deleted"}
+
+
+@app.get("/wn_templates/{filename}")
+def serve_template(filename: str):
+    """Serve template file for download"""
+    file_path = os.path.join(WN_TEMPLATES_DIR, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(404, "Template not found")
+    return FileResponse(
+        file_path,
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        filename=filename
+    )
+
+
 # Asset endpoints
 @app.get("/api/wn/assets", response_model=List[schemas.WNAssetResponse])
 def get_assets(brand_id: Optional[int] = None, asset_type: Optional[str] = None, db: Session = Depends(get_db)):
