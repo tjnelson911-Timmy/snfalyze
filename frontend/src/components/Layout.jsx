@@ -1,6 +1,6 @@
 import React from 'react'
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, FolderKanban, Plus, Building2, Briefcase } from 'lucide-react'
+import { LayoutDashboard, FolderKanban, Plus, Building2, Briefcase, Presentation, Settings } from 'lucide-react'
 
 function Layout({ children }) {
   return (
@@ -36,6 +36,18 @@ function Layout({ children }) {
               <NavLink to="/current-ops" className={({isActive}) => isActive ? 'active' : ''}>
                 <Briefcase size={18}/>
                 <span>Current Ops</span>
+              </NavLink>
+            </li>
+            <li style={{borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: '12px', paddingTop: '12px'}}>
+              <NavLink to="/welcome-nights" className={({isActive}) => isActive ? 'active' : ''}>
+                <Presentation size={18}/>
+                <span>Welcome Nights</span>
+              </NavLink>
+            </li>
+            <li>
+              <NavLink to="/admin/welcome-nights" className={({isActive}) => isActive ? 'active' : ''}>
+                <Settings size={18}/>
+                <span>WN Admin</span>
               </NavLink>
             </li>
           </ul>

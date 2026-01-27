@@ -992,3 +992,667 @@ body {
   opacity: 1;
   visibility: visible;
 }
+
+
+/* ============================================================================
+   WELCOME NIGHTS PRESENTATION BUILDER STYLES
+   ============================================================================ */
+
+/* Welcome Nights List Page */
+.wn-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.wn-filters {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.wn-filters .form-select,
+.wn-filters .form-input {
+  width: auto;
+  min-width: 150px;
+}
+
+.wn-presentations-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.wn-presentation-card {
+  background: white;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--gray-200);
+  padding: 20px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.wn-presentation-card:hover {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-md);
+}
+
+.wn-presentation-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.wn-presentation-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--gray-900);
+  margin-bottom: 4px;
+}
+
+.wn-presentation-facility {
+  font-size: 13px;
+  color: var(--gray-600);
+}
+
+.wn-presentation-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--gray-500);
+  margin-top: 12px;
+}
+
+.wn-brand-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.wn-brand-badge.cascadia {
+  background: rgba(11, 114, 128, 0.1);
+  color: #0b7280;
+}
+
+.wn-brand-badge.olympus {
+  background: rgba(30, 64, 175, 0.1);
+  color: #1e40af;
+}
+
+/* Wizard Steps */
+.wn-wizard {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.wn-wizard-steps {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 32px;
+  position: relative;
+}
+
+.wn-wizard-steps::before {
+  content: '';
+  position: absolute;
+  top: 20px;
+  left: 40px;
+  right: 40px;
+  height: 2px;
+  background: var(--gray-200);
+  z-index: 0;
+}
+
+.wn-wizard-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  z-index: 1;
+}
+
+.wn-wizard-step-number {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--gray-200);
+  color: var(--gray-600);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.wn-wizard-step.active .wn-wizard-step-number {
+  background: var(--primary);
+  color: white;
+}
+
+.wn-wizard-step.completed .wn-wizard-step-number {
+  background: var(--success);
+  color: white;
+}
+
+.wn-wizard-step-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--gray-500);
+}
+
+.wn-wizard-step.active .wn-wizard-step-label,
+.wn-wizard-step.completed .wn-wizard-step-label {
+  color: var(--gray-800);
+}
+
+.wn-wizard-content {
+  background: white;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--gray-200);
+  padding: 32px;
+  margin-bottom: 24px;
+}
+
+.wn-wizard-actions {
+  display: flex;
+  justify-content: space-between;
+}
+
+/* Brand Selection */
+.wn-brand-options {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.wn-brand-option {
+  padding: 24px;
+  border: 2px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.wn-brand-option:hover {
+  border-color: var(--gray-400);
+}
+
+.wn-brand-option.selected {
+  border-color: var(--primary);
+  background: var(--primary-bg);
+}
+
+.wn-brand-option-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--gray-900);
+  margin-bottom: 4px;
+}
+
+.wn-brand-option-desc {
+  font-size: 13px;
+  color: var(--gray-500);
+}
+
+/* Facility Selection */
+.wn-facility-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.wn-facility-option {
+  padding: 12px 16px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.wn-facility-option:hover {
+  border-color: var(--gray-400);
+  background: var(--gray-50);
+}
+
+.wn-facility-option.selected {
+  border-color: var(--primary);
+  background: var(--primary-bg);
+}
+
+/* Config Options */
+.wn-config-section {
+  margin-bottom: 24px;
+}
+
+.wn-config-section:last-child {
+  margin-bottom: 0;
+}
+
+.wn-config-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gray-800);
+  margin-bottom: 12px;
+}
+
+.wn-toggle-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wn-toggle-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.wn-toggle-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+}
+
+.wn-toggle-item label {
+  font-size: 14px;
+  color: var(--gray-700);
+  cursor: pointer;
+}
+
+.wn-number-input {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.wn-number-input input {
+  width: 80px;
+}
+
+/* Game Selection */
+.wn-game-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wn-game-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.wn-game-item:hover {
+  background: var(--gray-50);
+}
+
+.wn-game-item.selected {
+  border-color: var(--primary);
+  background: var(--primary-bg);
+}
+
+.wn-game-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+}
+
+.wn-game-info {
+  flex: 1;
+}
+
+.wn-game-title {
+  font-weight: 600;
+  color: var(--gray-900);
+  margin-bottom: 2px;
+}
+
+.wn-game-meta {
+  font-size: 12px;
+  color: var(--gray-500);
+}
+
+.wn-game-type-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.wn-game-type-badge.icebreaker {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.wn-game-type-badge.challenge {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+/* Preview Outline */
+.wn-preview-outline {
+  list-style: none;
+}
+
+.wn-preview-slide {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-bottom: 1px solid var(--gray-100);
+}
+
+.wn-preview-slide:last-child {
+  border-bottom: none;
+}
+
+.wn-preview-slide-number {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--gray-100);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gray-600);
+}
+
+.wn-preview-slide-type {
+  flex: 1;
+  font-size: 14px;
+  color: var(--gray-800);
+}
+
+.wn-preview-slide-type.raffle {
+  color: #b45309;
+  font-weight: 600;
+}
+
+/* Present Mode */
+.wn-present-mode {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #000;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+}
+
+.wn-present-controls {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: var(--radius-lg);
+  z-index: 10000;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.wn-present-mode:hover .wn-present-controls {
+  opacity: 1;
+}
+
+.wn-present-controls button {
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s ease;
+}
+
+.wn-present-controls button:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.wn-present-controls button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.wn-present-progress {
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.wn-slide-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
+
+.wn-slide {
+  width: 100%;
+  max-width: 1600px;
+  aspect-ratio: 16 / 9;
+  background: white;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+/* Slide Type Styles */
+.wn-slide-welcome {
+  background: var(--primary);
+  color: white;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 60px;
+}
+
+.wn-slide-welcome h1 {
+  font-size: 4rem;
+  font-weight: 700;
+  margin-bottom: 20px;
+}
+
+.wn-slide-welcome h2 {
+  font-size: 2rem;
+  font-weight: 400;
+  opacity: 0.9;
+}
+
+.wn-slide-welcome h3 {
+  font-size: 1.5rem;
+  font-weight: 400;
+  opacity: 0.8;
+  margin-top: 20px;
+}
+
+.wn-slide-raffle {
+  background: linear-gradient(135deg, #fcd34d 0%, #f59e0b 100%);
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+.wn-slide-raffle h1 {
+  font-size: 5rem;
+  font-weight: 800;
+  color: var(--primary);
+  text-shadow: 2px 2px 0 rgba(255,255,255,0.3);
+}
+
+.wn-slide-raffle p {
+  font-size: 1.5rem;
+  color: var(--primary);
+  margin-top: 20px;
+}
+
+.wn-slide-content {
+  padding: 0;
+}
+
+.wn-slide-header {
+  background: var(--primary);
+  color: white;
+  padding: 30px 50px;
+}
+
+.wn-slide-header h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+}
+
+.wn-slide-body {
+  flex: 1;
+  padding: 50px;
+  overflow: auto;
+}
+
+.wn-slide-game h2 {
+  font-size: 2rem;
+  color: var(--primary);
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.wn-slide-game .rules {
+  font-size: 1.25rem;
+  line-height: 1.8;
+  color: var(--gray-700);
+  white-space: pre-line;
+}
+
+.wn-slide-pillars {
+  background: var(--primary);
+  padding: 60px;
+}
+
+.wn-slide-pillars h1 {
+  font-size: 3rem;
+  font-weight: 700;
+  color: white;
+  text-align: center;
+  margin-bottom: 50px;
+}
+
+.wn-pillars-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 30px;
+}
+
+.wn-pillar {
+  background: white;
+  border-radius: var(--radius-lg);
+  padding: 40px 30px;
+  text-align: center;
+}
+
+.wn-pillar h3 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--primary);
+  margin-bottom: 15px;
+}
+
+.wn-pillar p {
+  font-size: 1.1rem;
+  color: var(--gray-600);
+}
+
+/* Admin Pages */
+.wn-admin-section {
+  margin-bottom: 32px;
+}
+
+.wn-admin-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.wn-admin-section-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--gray-900);
+}
+
+.wn-content-editor {
+  background: white;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--gray-200);
+  padding: 20px;
+}
+
+.wn-content-editor textarea {
+  width: 100%;
+  min-height: 200px;
+  font-family: monospace;
+  font-size: 13px;
+  padding: 12px;
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-md);
+  resize: vertical;
+}
+
+/* Export Buttons */
+.wn-export-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+/* Responsive adjustments for present mode */
+@media (max-width: 1200px) {
+  .wn-slide-welcome h1 {
+    font-size: 3rem;
+  }
+  .wn-slide-welcome h2 {
+    font-size: 1.5rem;
+  }
+  .wn-slide-raffle h1 {
+    font-size: 4rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .wn-slide-container {
+    padding: 20px;
+  }
+  .wn-slide-welcome h1 {
+    font-size: 2rem;
+  }
+  .wn-pillars-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+}

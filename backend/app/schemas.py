@@ -474,3 +474,225 @@ class OMScrubReport(BaseModel):
     red_flags: List[str]
     diligence_questions: List[str]
     overall_confidence: float
+
+
+# ============================================================================
+# WELCOME NIGHTS PRESENTATION BUILDER SCHEMAS
+# ============================================================================
+
+class BrandBase(BaseModel):
+    name: str
+    slug: str
+    primary_color: Optional[str] = "#0b7280"
+    secondary_color: Optional[str] = "#065a67"
+    font_family: Optional[str] = "Inter"
+    logo_url: Optional[str] = None
+
+class BrandCreate(BrandBase): pass
+
+class BrandUpdate(BaseModel):
+    name: Optional[str] = None
+    primary_color: Optional[str] = None
+    secondary_color: Optional[str] = None
+    font_family: Optional[str] = None
+    logo_url: Optional[str] = None
+
+class BrandResponse(BrandBase):
+    id: int
+    created_at: datetime
+    class Config: from_attributes = True
+
+
+class WNFacilityBase(BaseModel):
+    name: str
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    logo_asset_id: Optional[int] = None
+    extra_data: Optional[dict] = None
+
+class WNFacilityCreate(WNFacilityBase):
+    brand_id: int
+
+class WNFacilityUpdate(BaseModel):
+    name: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    logo_asset_id: Optional[int] = None
+    extra_data: Optional[dict] = None
+
+class WNFacilityResponse(WNFacilityBase):
+    id: int
+    brand_id: int
+    created_at: datetime
+    class Config: from_attributes = True
+
+
+class WNAssetBase(BaseModel):
+    asset_type: str
+    original_filename: str
+
+class WNAssetCreate(WNAssetBase):
+    brand_id: int
+    filename: str
+    url: str
+    mime_type: Optional[str] = None
+    file_size: Optional[int] = None
+
+class WNAssetResponse(BaseModel):
+    id: int
+    brand_id: int
+    asset_type: str
+    filename: str
+    original_filename: str
+    url: str
+    mime_type: Optional[str] = None
+    file_size: Optional[int] = None
+    created_at: datetime
+    class Config: from_attributes = True
+
+
+class AgendaTemplateBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    default_config: Optional[dict] = None
+    slide_blocks: Optional[List[dict]] = None
+    raffle_breakpoints: Optional[List[int]] = None
+
+class AgendaTemplateCreate(AgendaTemplateBase):
+    brand_id: int
+
+class AgendaTemplateUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    default_config: Optional[dict] = None
+    slide_blocks: Optional[List[dict]] = None
+    raffle_breakpoints: Optional[List[int]] = None
+    is_active: Optional[bool] = None
+
+class AgendaTemplateResponse(AgendaTemplateBase):
+    id: int
+    brand_id: int
+    is_active: bool
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    class Config: from_attributes = True
+
+
+class ReusableContentBase(BaseModel):
+    content_key: str
+    title: Optional[str] = None
+    content: Optional[dict] = None
+
+class ReusableContentCreate(ReusableContentBase):
+    brand_id: int
+
+class ReusableContentUpdate(BaseModel):
+    title: Optional[str] = None
+    content: Optional[dict] = None
+    updated_by: Optional[str] = None
+
+class ReusableContentResponse(ReusableContentBase):
+    id: int
+    brand_id: int
+    updated_at: datetime
+    updated_by: Optional[str] = None
+    class Config: from_attributes = True
+
+
+class GameBase(BaseModel):
+    title: str
+    description: Optional[str] = None
+    rules: Optional[str] = None
+    duration_minutes: Optional[int] = None
+    min_players: Optional[int] = None
+    max_players: Optional[int] = None
+    game_type: Optional[str] = "challenge"
+    value_label: Optional[str] = None
+    tags: Optional[List[str]] = None
+
+class GameCreate(GameBase):
+    brand_id: Optional[int] = None
+
+class GameUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    rules: Optional[str] = None
+    duration_minutes: Optional[int] = None
+    min_players: Optional[int] = None
+    max_players: Optional[int] = None
+    game_type: Optional[str] = None
+    value_label: Optional[str] = None
+    tags: Optional[List[str]] = None
+    is_active: Optional[bool] = None
+
+class GameResponse(GameBase):
+    id: int
+    brand_id: Optional[int] = None
+    is_active: bool
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    class Config: from_attributes = True
+
+
+class PresentationSlideInstanceBase(BaseModel):
+    order: int
+    slide_type: str
+    payload: Optional[dict] = None
+    notes: Optional[str] = None
+
+class PresentationSlideInstanceCreate(PresentationSlideInstanceBase): pass
+
+class PresentationSlideInstanceResponse(PresentationSlideInstanceBase):
+    id: int
+    presentation_id: int
+    created_at: datetime
+    class Config: from_attributes = True
+
+
+class PresentationBase(BaseModel):
+    title: str
+    config: Optional[dict] = None
+
+class PresentationCreate(PresentationBase):
+    brand_id: int
+    facility_id: int
+    agenda_template_id: int
+    created_by: Optional[str] = None
+
+class PresentationUpdate(BaseModel):
+    title: Optional[str] = None
+    config: Optional[dict] = None
+    status: Optional[str] = None
+
+class PresentationResponse(PresentationBase):
+    id: int
+    brand_id: int
+    facility_id: int
+    agenda_template_id: int
+    status: str
+    created_by: Optional[str] = None
+    presented_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    class Config: from_attributes = True
+
+class PresentationDetailResponse(PresentationResponse):
+    slide_instances: List[PresentationSlideInstanceResponse] = []
+    class Config: from_attributes = True
+
+
+class BuildSlidesRequest(BaseModel):
+    """Request to (re)build slide instances for a presentation"""
+    raffle_count: Optional[int] = 0
+    selected_game_ids: Optional[List[int]] = None
+    include_history: Optional[bool] = True
+    include_footprint: Optional[bool] = True
+    include_regions: Optional[bool] = True
+    include_culture: Optional[bool] = True
+
+class BuildSlidesResponse(BaseModel):
+    presentation_id: int
+    slides_created: int
+    slide_types: List[str]

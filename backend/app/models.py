@@ -150,7 +150,7 @@ class ExtractedField(Base):
     """Stores individual extracted values with full provenance"""
     __tablename__ = "extracted_fields"
     id = Column(Integer, primary_key=True, index=True)
-    document_id = Column(Integer, ForeignKey("documents.id"), nullable=False)
+    document_id = Column(Integer, ForeignKey("documents.id"), nullable=True)  # nullable for deal-level analysis
     deal_id = Column(Integer, ForeignKey("deals.id"), nullable=False)
     property_id = Column(Integer, ForeignKey("properties.id"))
     field_key = Column(String(100), nullable=False)  # e.g., "revenue", "ebitdar", "occupancy"
@@ -348,3 +348,147 @@ class AnalysisJob(Base):
     started_at = Column(DateTime)
     completed_at = Column(DateTime)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+# ============================================================================
+# WELCOME NIGHTS PRESENTATION BUILDER MODELS
+# ============================================================================
+
+class Brand(Base):
+    """Brand entity for Cascadia / Olympus"""
+    __tablename__ = "brands"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False, unique=True)
+    slug = Column(String(50), nullable=False, unique=True)
+    primary_color = Column(String(7), default="#0b7280")  # hex color
+    secondary_color = Column(String(7), default="#065a67")
+    font_family = Column(String(100), default="Inter")
+    logo_url = Column(String(500))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    # Relationships
+    facilities = relationship("WNFacility", back_populates="brand", cascade="all, delete-orphan")
+    assets = relationship("WNAsset", back_populates="brand", cascade="all, delete-orphan")
+    agenda_templates = relationship("AgendaTemplate", back_populates="brand", cascade="all, delete-orphan")
+    reusable_content = relationship("ReusableContent", back_populates="brand", cascade="all, delete-orphan")
+    presentations = relationship("Presentation", back_populates="brand", cascade="all, delete-orphan")
+
+
+class WNFacility(Base):
+    """Facility entity for Welcome Nights (separate from Deal properties)"""
+    __tablename__ = "wn_facilities"
+    id = Column(Integer, primary_key=True, index=True)
+    brand_id = Column(Integer, ForeignKey("brands.id"), nullable=False)
+    name = Column(String(255), nullable=False)
+    address = Column(String(255))
+    city = Column(String(100))
+    state = Column(String(50))
+    logo_asset_id = Column(Integer, ForeignKey("wn_assets.id"))
+    extra_data = Column(JSON, default=dict)  # optional extra data
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    # Relationships
+    brand = relationship("Brand", back_populates="facilities")
+    logo_asset = relationship("WNAsset", foreign_keys=[logo_asset_id])
+    presentations = relationship("Presentation", back_populates="facility", cascade="all, delete-orphan")
+
+
+class WNAsset(Base):
+    """Asset library for Welcome Nights (logos, images, backgrounds)"""
+    __tablename__ = "wn_assets"
+    id = Column(Integer, primary_key=True, index=True)
+    brand_id = Column(Integer, ForeignKey("brands.id"), nullable=False)
+    asset_type = Column(String(50), nullable=False)  # logo, background, icon, image
+    filename = Column(String(255), nullable=False)
+    original_filename = Column(String(255), nullable=False)
+    url = Column(String(500), nullable=False)
+    mime_type = Column(String(100))
+    file_size = Column(Integer)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    # Relationships
+    brand = relationship("Brand", back_populates="assets")
+
+
+class AgendaTemplate(Base):
+    """Agenda template defining slide block structure"""
+    __tablename__ = "agenda_templates"
+    id = Column(Integer, primary_key=True, index=True)
+    brand_id = Column(Integer, ForeignKey("brands.id"), nullable=False)
+    name = Column(String(100), nullable=False)
+    description = Column(Text)
+    default_config = Column(JSON, default=dict)  # default options
+    slide_blocks = Column(JSON, default=list)  # ordered list of slide block definitions
+    raffle_breakpoints = Column(JSON, default=list)  # indices where raffle slides can be inserted
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    # Relationships
+    brand = relationship("Brand", back_populates="agenda_templates")
+    presentations = relationship("Presentation", back_populates="agenda_template")
+
+
+class ReusableContent(Base):
+    """Centrally-managed reusable content blocks"""
+    __tablename__ = "reusable_content"
+    id = Column(Integer, primary_key=True, index=True)
+    brand_id = Column(Integer, ForeignKey("brands.id"), nullable=False)
+    content_key = Column(String(50), nullable=False)  # history, footprint, regions, culture
+    title = Column(String(255))
+    content = Column(JSON, default=dict)  # structured content (timeline items, stats, etc.)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_by = Column(String(255))
+    # Relationships
+    brand = relationship("Brand", back_populates="reusable_content")
+
+
+class Game(Base):
+    """Game library for icebreakers and challenges"""
+    __tablename__ = "wn_games"
+    id = Column(Integer, primary_key=True, index=True)
+    brand_id = Column(Integer, ForeignKey("brands.id"))  # nullable for global games
+    title = Column(String(255), nullable=False)
+    description = Column(Text)
+    rules = Column(Text)
+    duration_minutes = Column(Integer)
+    min_players = Column(Integer)
+    max_players = Column(Integer)
+    game_type = Column(String(50), default="challenge")  # icebreaker, challenge
+    value_label = Column(String(100))  # e.g., FAMILY, OWNERSHIP, TEAMWORK
+    tags = Column(JSON, default=list)  # additional categorization
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class Presentation(Base):
+    """A specific presentation instance"""
+    __tablename__ = "wn_presentations"
+    id = Column(Integer, primary_key=True, index=True)
+    brand_id = Column(Integer, ForeignKey("brands.id"), nullable=False)
+    facility_id = Column(Integer, ForeignKey("wn_facilities.id"), nullable=False)
+    agenda_template_id = Column(Integer, ForeignKey("agenda_templates.id"), nullable=False)
+    title = Column(String(255), nullable=False)
+    config = Column(JSON, default=dict)  # user configuration (raffle count, selected games, toggles)
+    status = Column(String(50), default="draft")  # draft, ready, presented, archived
+    created_by = Column(String(255))
+    presented_at = Column(DateTime)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    # Relationships
+    brand = relationship("Brand", back_populates="presentations")
+    facility = relationship("WNFacility", back_populates="presentations")
+    agenda_template = relationship("AgendaTemplate", back_populates="presentations")
+    slide_instances = relationship("PresentationSlideInstance", back_populates="presentation",
+                                   cascade="all, delete-orphan", order_by="PresentationSlideInstance.order")
+
+
+class PresentationSlideInstance(Base):
+    """Individual slide instance within a presentation"""
+    __tablename__ = "wn_presentation_slides"
+    id = Column(Integer, primary_key=True, index=True)
+    presentation_id = Column(Integer, ForeignKey("wn_presentations.id"), nullable=False)
+    order = Column(Integer, nullable=False)  # slide order (0-indexed)
+    slide_type = Column(String(50), nullable=False)  # WelcomeIntro, RaffleBumper, HistoryBlock, etc.
+    payload = Column(JSON, default=dict)  # slide-specific data
+    notes = Column(Text)  # optional speaker notes
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    # Relationships
+    presentation = relationship("Presentation", back_populates="slide_instances")

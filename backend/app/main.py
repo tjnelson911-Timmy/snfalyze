@@ -22,6 +22,8 @@ from . import export_reports
 from . import market_analysis
 from . import property_research
 from . import deep_financial_analysis
+from . import slide_builder
+from . import presentation_export
 
 models.Base.metadata.create_all(bind=engine)
 app = FastAPI(title="SNFalyze Deal Tracker")
@@ -1102,18 +1104,22 @@ def export_proforma_csv(deal_id: int, db: Session = Depends(get_db)):
 @app.post("/api/deals/{deal_id}/comprehensive-analysis")
 def run_comprehensive_analysis(deal_id: int, db: Session = Depends(get_db)):
     """Run complete enhanced analysis: market analysis, property research, deep financials, risks, scorecard"""
+    import traceback
     deal = crud.get_deal(db, deal_id)
     if not deal: raise HTTPException(404, "Deal not found")
 
     results = {"deal_id": deal_id, "steps": []}
 
     # Step 1: Document analysis
-    analysis_job = analysis_pipeline.start_deal_analysis(db, deal_id)
-    results["steps"].append({
-        "step": "document_analysis",
-        "job_id": analysis_job.id,
-        "status": "started"
-    })
+    try:
+        analysis_job = analysis_pipeline.start_deal_analysis(db, deal_id)
+        results["steps"].append({
+            "step": "document_analysis",
+            "job_id": analysis_job.id,
+            "status": "started"
+        })
+    except Exception as e:
+        results["steps"].append({"step": "document_analysis", "status": "error", "error": str(e)})
 
     # Step 2: Market analysis
     try:
@@ -1154,28 +1160,449 @@ def run_comprehensive_analysis(deal_id: int, db: Session = Depends(get_db)):
         results["steps"].append({"step": "deep_financial_analysis", "status": "error", "error": str(e)})
 
     # Step 5: Verify claims
-    claims_updated = om_scrubber.verify_claims_against_evidence(db, deal_id)
-    results["steps"].append({
-        "step": "claim_verification",
-        "claims_updated": claims_updated
-    })
+    try:
+        claims_updated = om_scrubber.verify_claims_against_evidence(db, deal_id)
+        results["steps"].append({
+            "step": "claim_verification",
+            "claims_updated": claims_updated
+        })
+    except Exception as e:
+        results["steps"].append({"step": "claim_verification", "status": "error", "error": str(e)})
 
     # Step 6: Detect risks
-    risks_created = risk_scoring.create_risk_flags_for_deal(db, deal_id)
-    results["steps"].append({
-        "step": "risk_detection",
-        "flags_created": risks_created
-    })
+    try:
+        risks_created = risk_scoring.create_risk_flags_for_deal(db, deal_id)
+        results["steps"].append({
+            "step": "risk_detection",
+            "flags_created": risks_created
+        })
+    except Exception as e:
+        results["steps"].append({"step": "risk_detection", "status": "error", "error": str(e)})
 
     # Step 7: Calculate scorecard
-    scorecard = risk_scoring.calculate_deal_scorecard(db, deal_id)
-    results["steps"].append({
-        "step": "scorecard",
-        "overall_score": scorecard.overall_score,
-        "recommendation": scorecard.recommendation
-    })
+    try:
+        scorecard = risk_scoring.calculate_deal_scorecard(db, deal_id)
+        results["steps"].append({
+            "step": "scorecard",
+            "overall_score": scorecard.overall_score,
+            "recommendation": scorecard.recommendation
+        })
+    except Exception as e:
+        results["steps"].append({"step": "scorecard", "status": "error", "error": str(e)})
 
     return results
+
+
+# ============================================================================
+# WELCOME NIGHTS PRESENTATION BUILDER ENDPOINTS
+# ============================================================================
+
+# Welcome Nights asset upload directory
+WN_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "wn_uploads")
+os.makedirs(WN_UPLOAD_DIR, exist_ok=True)
+app.mount("/wn_uploads", StaticFiles(directory=WN_UPLOAD_DIR), name="wn_uploads")
+
+
+# Brand endpoints
+@app.get("/api/wn/brands", response_model=List[schemas.BrandResponse])
+def get_brands(db: Session = Depends(get_db)):
+    """Get all brands"""
+    return crud.get_brands(db)
+
+
+@app.get("/api/wn/brands/{brand_id}", response_model=schemas.BrandResponse)
+def get_brand(brand_id: int, db: Session = Depends(get_db)):
+    """Get a brand by ID"""
+    brand = crud.get_brand(db, brand_id)
+    if not brand:
+        raise HTTPException(404, "Brand not found")
+    return brand
+
+
+@app.post("/api/wn/brands", response_model=schemas.BrandResponse)
+def create_brand(brand: schemas.BrandCreate, db: Session = Depends(get_db)):
+    """Create a new brand (admin only)"""
+    return crud.create_brand(db, brand)
+
+
+@app.put("/api/wn/brands/{brand_id}", response_model=schemas.BrandResponse)
+def update_brand(brand_id: int, brand: schemas.BrandUpdate, db: Session = Depends(get_db)):
+    """Update a brand (admin only)"""
+    b = crud.update_brand(db, brand_id, brand)
+    if not b:
+        raise HTTPException(404, "Brand not found")
+    return b
+
+
+# Facility endpoints
+@app.get("/api/wn/facilities", response_model=List[schemas.WNFacilityResponse])
+def get_facilities(brand_id: Optional[int] = None, search: Optional[str] = None, db: Session = Depends(get_db)):
+    """Get facilities, optionally filtered by brand"""
+    return crud.get_wn_facilities(db, brand_id, search)
+
+
+@app.get("/api/wn/facilities/{facility_id}", response_model=schemas.WNFacilityResponse)
+def get_facility(facility_id: int, db: Session = Depends(get_db)):
+    """Get a facility by ID"""
+    facility = crud.get_wn_facility(db, facility_id)
+    if not facility:
+        raise HTTPException(404, "Facility not found")
+    return facility
+
+
+@app.post("/api/wn/facilities", response_model=schemas.WNFacilityResponse)
+def create_facility(facility: schemas.WNFacilityCreate, db: Session = Depends(get_db)):
+    """Create a new facility (admin only)"""
+    return crud.create_wn_facility(db, facility)
+
+
+@app.put("/api/wn/facilities/{facility_id}", response_model=schemas.WNFacilityResponse)
+def update_facility(facility_id: int, facility: schemas.WNFacilityUpdate, db: Session = Depends(get_db)):
+    """Update a facility (admin only)"""
+    f = crud.update_wn_facility(db, facility_id, facility)
+    if not f:
+        raise HTTPException(404, "Facility not found")
+    return f
+
+
+@app.delete("/api/wn/facilities/{facility_id}")
+def delete_facility(facility_id: int, db: Session = Depends(get_db)):
+    """Delete a facility (admin only)"""
+    if not crud.delete_wn_facility(db, facility_id):
+        raise HTTPException(404, "Facility not found")
+    return {"message": "Deleted"}
+
+
+# Asset endpoints
+@app.get("/api/wn/assets", response_model=List[schemas.WNAssetResponse])
+def get_assets(brand_id: Optional[int] = None, asset_type: Optional[str] = None, db: Session = Depends(get_db)):
+    """Get assets, optionally filtered by brand and type"""
+    return crud.get_wn_assets(db, brand_id, asset_type)
+
+
+@app.post("/api/wn/assets")
+async def upload_asset(
+    brand_id: int = Form(...),
+    asset_type: str = Form(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """Upload an asset (logo, background, etc.)"""
+    ext = file.filename.split(".")[-1].lower()
+    if ext not in {"png", "jpg", "jpeg", "gif", "svg", "webp"}:
+        raise HTTPException(400, "Invalid file type. Supported: png, jpg, jpeg, gif, svg, webp")
+
+    content = await file.read()
+    fname = f"{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{file.filename}"
+    file_path = os.path.join(WN_UPLOAD_DIR, fname)
+
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    asset = crud.create_wn_asset(db, schemas.WNAssetCreate(
+        brand_id=brand_id,
+        asset_type=asset_type,
+        filename=fname,
+        original_filename=file.filename,
+        url=f"/wn_uploads/{fname}",
+        mime_type=file.content_type,
+        file_size=len(content)
+    ))
+
+    return {"message": "Uploaded", "asset": asset}
+
+
+@app.delete("/api/wn/assets/{asset_id}")
+def delete_asset(asset_id: int, db: Session = Depends(get_db)):
+    """Delete an asset"""
+    asset = crud.get_wn_asset(db, asset_id)
+    if not asset:
+        raise HTTPException(404, "Asset not found")
+    try:
+        os.remove(os.path.join(WN_UPLOAD_DIR, asset.filename))
+    except:
+        pass
+    crud.delete_wn_asset(db, asset_id)
+    return {"message": "Deleted"}
+
+
+# Agenda Template endpoints
+@app.get("/api/wn/agenda-templates", response_model=List[schemas.AgendaTemplateResponse])
+def get_agenda_templates(brand_id: Optional[int] = None, db: Session = Depends(get_db)):
+    """Get agenda templates, optionally filtered by brand"""
+    return crud.get_agenda_templates(db, brand_id)
+
+
+@app.get("/api/wn/agenda-templates/{template_id}", response_model=schemas.AgendaTemplateResponse)
+def get_agenda_template(template_id: int, db: Session = Depends(get_db)):
+    """Get an agenda template by ID"""
+    template = crud.get_agenda_template(db, template_id)
+    if not template:
+        raise HTTPException(404, "Template not found")
+    return template
+
+
+@app.post("/api/wn/agenda-templates", response_model=schemas.AgendaTemplateResponse)
+def create_agenda_template(template: schemas.AgendaTemplateCreate, db: Session = Depends(get_db)):
+    """Create a new agenda template (admin only)"""
+    return crud.create_agenda_template(db, template)
+
+
+@app.put("/api/wn/agenda-templates/{template_id}", response_model=schemas.AgendaTemplateResponse)
+def update_agenda_template(template_id: int, template: schemas.AgendaTemplateUpdate, db: Session = Depends(get_db)):
+    """Update an agenda template (admin only)"""
+    t = crud.update_agenda_template(db, template_id, template)
+    if not t:
+        raise HTTPException(404, "Template not found")
+    return t
+
+
+@app.delete("/api/wn/agenda-templates/{template_id}")
+def delete_agenda_template(template_id: int, db: Session = Depends(get_db)):
+    """Delete an agenda template (admin only)"""
+    if not crud.delete_agenda_template(db, template_id):
+        raise HTTPException(404, "Template not found")
+    return {"message": "Deleted"}
+
+
+# Reusable Content endpoints
+@app.get("/api/wn/content", response_model=List[schemas.ReusableContentResponse])
+def get_reusable_content(brand_id: int, content_key: Optional[str] = None, db: Session = Depends(get_db)):
+    """Get reusable content for a brand"""
+    return crud.get_reusable_content(db, brand_id, content_key)
+
+
+@app.get("/api/wn/content/{content_id}", response_model=schemas.ReusableContentResponse)
+def get_reusable_content_item(content_id: int, db: Session = Depends(get_db)):
+    """Get a reusable content item by ID"""
+    content = crud.get_reusable_content_item(db, content_id)
+    if not content:
+        raise HTTPException(404, "Content not found")
+    return content
+
+
+@app.post("/api/wn/content", response_model=schemas.ReusableContentResponse)
+def create_reusable_content(content: schemas.ReusableContentCreate, db: Session = Depends(get_db)):
+    """Create a new reusable content item (admin only)"""
+    return crud.create_reusable_content(db, content)
+
+
+@app.put("/api/wn/content/{content_id}", response_model=schemas.ReusableContentResponse)
+def update_reusable_content(content_id: int, content: schemas.ReusableContentUpdate, db: Session = Depends(get_db)):
+    """Update a reusable content item (admin only)"""
+    c = crud.update_reusable_content(db, content_id, content)
+    if not c:
+        raise HTTPException(404, "Content not found")
+    return c
+
+
+# Game endpoints
+@app.get("/api/wn/games", response_model=List[schemas.GameResponse])
+def get_games(brand_id: Optional[int] = None, game_type: Optional[str] = None, db: Session = Depends(get_db)):
+    """Get games, optionally filtered by brand and type"""
+    return crud.get_games(db, brand_id, game_type)
+
+
+@app.get("/api/wn/games/{game_id}", response_model=schemas.GameResponse)
+def get_game(game_id: int, db: Session = Depends(get_db)):
+    """Get a game by ID"""
+    game = crud.get_game(db, game_id)
+    if not game:
+        raise HTTPException(404, "Game not found")
+    return game
+
+
+@app.post("/api/wn/games", response_model=schemas.GameResponse)
+def create_game(game: schemas.GameCreate, db: Session = Depends(get_db)):
+    """Create a new game (admin only)"""
+    return crud.create_game(db, game)
+
+
+@app.put("/api/wn/games/{game_id}", response_model=schemas.GameResponse)
+def update_game(game_id: int, game: schemas.GameUpdate, db: Session = Depends(get_db)):
+    """Update a game (admin only)"""
+    g = crud.update_game(db, game_id, game)
+    if not g:
+        raise HTTPException(404, "Game not found")
+    return g
+
+
+@app.delete("/api/wn/games/{game_id}")
+def delete_game(game_id: int, db: Session = Depends(get_db)):
+    """Delete a game (admin only)"""
+    if not crud.delete_game(db, game_id):
+        raise HTTPException(404, "Game not found")
+    return {"message": "Deleted"}
+
+
+# Presentation endpoints
+@app.get("/api/wn/presentations", response_model=List[schemas.PresentationResponse])
+def get_presentations(
+    brand_id: Optional[int] = None,
+    facility_id: Optional[int] = None,
+    search: Optional[str] = None,
+    status: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Get presentations with optional filters"""
+    return crud.get_presentations(db, brand_id, facility_id, search, status)
+
+
+@app.get("/api/wn/presentations/{presentation_id}", response_model=schemas.PresentationDetailResponse)
+def get_presentation(presentation_id: int, db: Session = Depends(get_db)):
+    """Get a presentation by ID with all slides"""
+    presentation = crud.get_presentation(db, presentation_id)
+    if not presentation:
+        raise HTTPException(404, "Presentation not found")
+    return presentation
+
+
+@app.post("/api/wn/presentations", response_model=schemas.PresentationResponse)
+def create_presentation(presentation: schemas.PresentationCreate, db: Session = Depends(get_db)):
+    """Create a new presentation"""
+    return crud.create_presentation(db, presentation)
+
+
+@app.put("/api/wn/presentations/{presentation_id}", response_model=schemas.PresentationResponse)
+def update_presentation(presentation_id: int, presentation: schemas.PresentationUpdate, db: Session = Depends(get_db)):
+    """Update a presentation"""
+    p = crud.update_presentation(db, presentation_id, presentation)
+    if not p:
+        raise HTTPException(404, "Presentation not found")
+    return p
+
+
+@app.delete("/api/wn/presentations/{presentation_id}")
+def delete_presentation(presentation_id: int, db: Session = Depends(get_db)):
+    """Delete a presentation"""
+    if not crud.delete_presentation(db, presentation_id):
+        raise HTTPException(404, "Presentation not found")
+    return {"message": "Deleted"}
+
+
+# Build slides endpoint
+@app.post("/api/wn/presentations/{presentation_id}/build-slides", response_model=schemas.BuildSlidesResponse)
+def build_presentation_slides(presentation_id: int, request: schemas.BuildSlidesRequest, db: Session = Depends(get_db)):
+    """(Re)build slide instances for a presentation from config"""
+    try:
+        config = request.model_dump()
+        slides = slide_builder.build_slides(db, presentation_id, config)
+        return {
+            "presentation_id": presentation_id,
+            "slides_created": len(slides),
+            "slide_types": [s["slide_type"] for s in slides]
+        }
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+# Get slides for presentation
+@app.get("/api/wn/presentations/{presentation_id}/slides", response_model=List[schemas.PresentationSlideInstanceResponse])
+def get_presentation_slides(presentation_id: int, db: Session = Depends(get_db)):
+    """Get all slides for a presentation in order"""
+    return crud.get_presentation_slides(db, presentation_id)
+
+
+# Present mode data endpoint (returns all data needed for present mode)
+@app.get("/api/wn/presentations/{presentation_id}/present")
+def get_presentation_present_data(presentation_id: int, db: Session = Depends(get_db)):
+    """Get all data needed for present mode"""
+    presentation = crud.get_presentation(db, presentation_id)
+    if not presentation:
+        raise HTTPException(404, "Presentation not found")
+
+    brand = crud.get_brand(db, presentation.brand_id)
+    facility = crud.get_wn_facility(db, presentation.facility_id)
+    slides = crud.get_presentation_slides(db, presentation_id)
+
+    return {
+        "presentation": {
+            "id": presentation.id,
+            "title": presentation.title,
+            "status": presentation.status,
+            "config": presentation.config,
+        },
+        "brand": {
+            "id": brand.id,
+            "name": brand.name,
+            "slug": brand.slug,
+            "primary_color": brand.primary_color,
+            "secondary_color": brand.secondary_color,
+            "font_family": brand.font_family,
+            "logo_url": brand.logo_url,
+        },
+        "facility": {
+            "id": facility.id,
+            "name": facility.name,
+            "city": facility.city,
+            "state": facility.state,
+        },
+        "slides": [
+            {
+                "id": s.id,
+                "order": s.order,
+                "slide_type": s.slide_type,
+                "payload": s.payload,
+                "notes": s.notes,
+            }
+            for s in slides
+        ],
+        "total_slides": len(slides),
+    }
+
+
+# Export endpoints
+@app.get("/api/wn/presentations/{presentation_id}/export/pptx")
+def export_presentation_pptx(presentation_id: int, db: Session = Depends(get_db)):
+    """Export presentation to PPTX"""
+    presentation = crud.get_presentation(db, presentation_id)
+    if not presentation:
+        raise HTTPException(404, "Presentation not found")
+
+    try:
+        pptx_bytes = presentation_export.export_to_pptx(db, presentation_id)
+        filename = presentation_export.get_export_filename(presentation, "pptx")
+        return Response(
+            content=pptx_bytes,
+            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+    except Exception as e:
+        raise HTTPException(500, f"Export failed: {str(e)}")
+
+
+@app.get("/api/wn/presentations/{presentation_id}/export/pdf")
+def export_presentation_pdf(presentation_id: int, db: Session = Depends(get_db)):
+    """Export presentation to PDF"""
+    presentation = crud.get_presentation(db, presentation_id)
+    if not presentation:
+        raise HTTPException(404, "Presentation not found")
+
+    try:
+        pdf_bytes = presentation_export.export_to_pdf(db, presentation_id)
+        filename = presentation_export.get_export_filename(presentation, "pdf")
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+    except Exception as e:
+        raise HTTPException(500, f"Export failed: {str(e)}")
+
+
+# Mark presentation as presented
+@app.post("/api/wn/presentations/{presentation_id}/mark-presented")
+def mark_presentation_presented(presentation_id: int, db: Session = Depends(get_db)):
+    """Mark a presentation as presented"""
+    presentation = crud.get_presentation(db, presentation_id)
+    if not presentation:
+        raise HTTPException(404, "Presentation not found")
+
+    presentation.status = "presented"
+    presentation.presented_at = datetime.utcnow()
+    db.commit()
+    db.refresh(presentation)
+    return {"message": "Marked as presented", "presented_at": presentation.presented_at}
 
 
 # Serve frontend for non-API routes (must be at the end)

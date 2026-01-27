@@ -551,3 +551,357 @@ def get_analysis_jobs(db: Session, deal_id: int = None, document_id: int = None,
     if status:
         query = query.filter(models.AnalysisJob.status == status)
     return query.order_by(models.AnalysisJob.created_at.desc()).all()
+
+
+# ============================================================================
+# WELCOME NIGHTS PRESENTATION BUILDER CRUD
+# ============================================================================
+
+# Brand CRUD
+def get_brands(db: Session):
+    """Get all brands"""
+    return db.query(models.Brand).order_by(models.Brand.name).all()
+
+
+def get_brand(db: Session, brand_id: int):
+    """Get a brand by ID"""
+    return db.query(models.Brand).filter(models.Brand.id == brand_id).first()
+
+
+def get_brand_by_slug(db: Session, slug: str):
+    """Get a brand by slug"""
+    return db.query(models.Brand).filter(models.Brand.slug == slug).first()
+
+
+def create_brand(db: Session, brand: schemas.BrandCreate):
+    """Create a new brand"""
+    db_brand = models.Brand(**brand.model_dump())
+    db.add(db_brand)
+    db.commit()
+    db.refresh(db_brand)
+    return db_brand
+
+
+def update_brand(db: Session, brand_id: int, brand: schemas.BrandUpdate):
+    """Update a brand"""
+    db_brand = db.query(models.Brand).filter(models.Brand.id == brand_id).first()
+    if not db_brand:
+        return None
+    for k, v in brand.model_dump(exclude_unset=True).items():
+        setattr(db_brand, k, v)
+    db.commit()
+    db.refresh(db_brand)
+    return db_brand
+
+
+# Facility CRUD
+def get_wn_facilities(db: Session, brand_id: int = None, search: str = None):
+    """Get facilities, optionally filtered by brand"""
+    query = db.query(models.WNFacility)
+    if brand_id:
+        query = query.filter(models.WNFacility.brand_id == brand_id)
+    if search:
+        query = query.filter(models.WNFacility.name.ilike(f"%{search}%"))
+    return query.order_by(models.WNFacility.name).all()
+
+
+def get_wn_facility(db: Session, facility_id: int):
+    """Get a facility by ID"""
+    return db.query(models.WNFacility).filter(models.WNFacility.id == facility_id).first()
+
+
+def create_wn_facility(db: Session, facility: schemas.WNFacilityCreate):
+    """Create a new facility"""
+    db_facility = models.WNFacility(**facility.model_dump())
+    db.add(db_facility)
+    db.commit()
+    db.refresh(db_facility)
+    return db_facility
+
+
+def update_wn_facility(db: Session, facility_id: int, facility: schemas.WNFacilityUpdate):
+    """Update a facility"""
+    db_facility = db.query(models.WNFacility).filter(models.WNFacility.id == facility_id).first()
+    if not db_facility:
+        return None
+    for k, v in facility.model_dump(exclude_unset=True).items():
+        setattr(db_facility, k, v)
+    db.commit()
+    db.refresh(db_facility)
+    return db_facility
+
+
+def delete_wn_facility(db: Session, facility_id: int):
+    """Delete a facility"""
+    db_facility = db.query(models.WNFacility).filter(models.WNFacility.id == facility_id).first()
+    if not db_facility:
+        return False
+    db.delete(db_facility)
+    db.commit()
+    return True
+
+
+# Asset CRUD
+def get_wn_assets(db: Session, brand_id: int = None, asset_type: str = None):
+    """Get assets, optionally filtered by brand and type"""
+    query = db.query(models.WNAsset)
+    if brand_id:
+        query = query.filter(models.WNAsset.brand_id == brand_id)
+    if asset_type:
+        query = query.filter(models.WNAsset.asset_type == asset_type)
+    return query.order_by(models.WNAsset.created_at.desc()).all()
+
+
+def get_wn_asset(db: Session, asset_id: int):
+    """Get an asset by ID"""
+    return db.query(models.WNAsset).filter(models.WNAsset.id == asset_id).first()
+
+
+def create_wn_asset(db: Session, asset: schemas.WNAssetCreate):
+    """Create a new asset"""
+    db_asset = models.WNAsset(**asset.model_dump())
+    db.add(db_asset)
+    db.commit()
+    db.refresh(db_asset)
+    return db_asset
+
+
+def delete_wn_asset(db: Session, asset_id: int):
+    """Delete an asset"""
+    db_asset = db.query(models.WNAsset).filter(models.WNAsset.id == asset_id).first()
+    if not db_asset:
+        return False
+    db.delete(db_asset)
+    db.commit()
+    return True
+
+
+# Agenda Template CRUD
+def get_agenda_templates(db: Session, brand_id: int = None, active_only: bool = True):
+    """Get agenda templates, optionally filtered by brand"""
+    query = db.query(models.AgendaTemplate)
+    if brand_id:
+        query = query.filter(models.AgendaTemplate.brand_id == brand_id)
+    if active_only:
+        query = query.filter(models.AgendaTemplate.is_active == True)
+    return query.order_by(models.AgendaTemplate.name).all()
+
+
+def get_agenda_template(db: Session, template_id: int):
+    """Get an agenda template by ID"""
+    return db.query(models.AgendaTemplate).filter(models.AgendaTemplate.id == template_id).first()
+
+
+def create_agenda_template(db: Session, template: schemas.AgendaTemplateCreate):
+    """Create a new agenda template"""
+    db_template = models.AgendaTemplate(**template.model_dump())
+    db.add(db_template)
+    db.commit()
+    db.refresh(db_template)
+    return db_template
+
+
+def update_agenda_template(db: Session, template_id: int, template: schemas.AgendaTemplateUpdate):
+    """Update an agenda template"""
+    db_template = db.query(models.AgendaTemplate).filter(models.AgendaTemplate.id == template_id).first()
+    if not db_template:
+        return None
+    for k, v in template.model_dump(exclude_unset=True).items():
+        setattr(db_template, k, v)
+    db_template.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(db_template)
+    return db_template
+
+
+def delete_agenda_template(db: Session, template_id: int):
+    """Delete an agenda template"""
+    db_template = db.query(models.AgendaTemplate).filter(models.AgendaTemplate.id == template_id).first()
+    if not db_template:
+        return False
+    db.delete(db_template)
+    db.commit()
+    return True
+
+
+# Reusable Content CRUD
+def get_reusable_content(db: Session, brand_id: int, content_key: str = None):
+    """Get reusable content for a brand"""
+    query = db.query(models.ReusableContent).filter(models.ReusableContent.brand_id == brand_id)
+    if content_key:
+        query = query.filter(models.ReusableContent.content_key == content_key)
+    return query.all()
+
+
+def get_reusable_content_item(db: Session, content_id: int):
+    """Get a reusable content item by ID"""
+    return db.query(models.ReusableContent).filter(models.ReusableContent.id == content_id).first()
+
+
+def create_reusable_content(db: Session, content: schemas.ReusableContentCreate):
+    """Create a new reusable content item"""
+    db_content = models.ReusableContent(**content.model_dump())
+    db.add(db_content)
+    db.commit()
+    db.refresh(db_content)
+    return db_content
+
+
+def update_reusable_content(db: Session, content_id: int, content: schemas.ReusableContentUpdate):
+    """Update a reusable content item"""
+    db_content = db.query(models.ReusableContent).filter(models.ReusableContent.id == content_id).first()
+    if not db_content:
+        return None
+    for k, v in content.model_dump(exclude_unset=True).items():
+        setattr(db_content, k, v)
+    db_content.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(db_content)
+    return db_content
+
+
+# Game CRUD
+def get_games(db: Session, brand_id: int = None, game_type: str = None, active_only: bool = True):
+    """Get games, optionally filtered by brand and type"""
+    query = db.query(models.Game)
+    if brand_id:
+        # Include global games (brand_id is null) and brand-specific games
+        query = query.filter(or_(models.Game.brand_id == brand_id, models.Game.brand_id == None))
+    if game_type:
+        query = query.filter(models.Game.game_type == game_type)
+    if active_only:
+        query = query.filter(models.Game.is_active == True)
+    return query.order_by(models.Game.game_type, models.Game.title).all()
+
+
+def get_game(db: Session, game_id: int):
+    """Get a game by ID"""
+    return db.query(models.Game).filter(models.Game.id == game_id).first()
+
+
+def create_game(db: Session, game: schemas.GameCreate):
+    """Create a new game"""
+    db_game = models.Game(**game.model_dump())
+    db.add(db_game)
+    db.commit()
+    db.refresh(db_game)
+    return db_game
+
+
+def update_game(db: Session, game_id: int, game: schemas.GameUpdate):
+    """Update a game"""
+    db_game = db.query(models.Game).filter(models.Game.id == game_id).first()
+    if not db_game:
+        return None
+    for k, v in game.model_dump(exclude_unset=True).items():
+        setattr(db_game, k, v)
+    db_game.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(db_game)
+    return db_game
+
+
+def delete_game(db: Session, game_id: int):
+    """Delete a game"""
+    db_game = db.query(models.Game).filter(models.Game.id == game_id).first()
+    if not db_game:
+        return False
+    db.delete(db_game)
+    db.commit()
+    return True
+
+
+# Presentation CRUD
+def get_presentations(db: Session, brand_id: int = None, facility_id: int = None, search: str = None, status: str = None):
+    """Get presentations, with optional filters"""
+    query = db.query(models.Presentation)
+    if brand_id:
+        query = query.filter(models.Presentation.brand_id == brand_id)
+    if facility_id:
+        query = query.filter(models.Presentation.facility_id == facility_id)
+    if search:
+        query = query.filter(models.Presentation.title.ilike(f"%{search}%"))
+    if status:
+        query = query.filter(models.Presentation.status == status)
+    return query.order_by(models.Presentation.updated_at.desc()).all()
+
+
+def get_presentation(db: Session, presentation_id: int):
+    """Get a presentation by ID with all slides"""
+    return db.query(models.Presentation).filter(models.Presentation.id == presentation_id).first()
+
+
+def create_presentation(db: Session, presentation: schemas.PresentationCreate):
+    """Create a new presentation"""
+    db_pres = models.Presentation(**presentation.model_dump())
+    db.add(db_pres)
+    db.commit()
+    db.refresh(db_pres)
+    return db_pres
+
+
+def update_presentation(db: Session, presentation_id: int, presentation: schemas.PresentationUpdate):
+    """Update a presentation"""
+    db_pres = db.query(models.Presentation).filter(models.Presentation.id == presentation_id).first()
+    if not db_pres:
+        return None
+    for k, v in presentation.model_dump(exclude_unset=True).items():
+        setattr(db_pres, k, v)
+    db_pres.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(db_pres)
+    return db_pres
+
+
+def delete_presentation(db: Session, presentation_id: int):
+    """Delete a presentation and all its slides"""
+    db_pres = db.query(models.Presentation).filter(models.Presentation.id == presentation_id).first()
+    if not db_pres:
+        return False
+    db.delete(db_pres)
+    db.commit()
+    return True
+
+
+# Slide Instance CRUD
+def get_presentation_slides(db: Session, presentation_id: int):
+    """Get all slides for a presentation in order"""
+    return db.query(models.PresentationSlideInstance).filter(
+        models.PresentationSlideInstance.presentation_id == presentation_id
+    ).order_by(models.PresentationSlideInstance.order).all()
+
+
+def create_presentation_slide(db: Session, presentation_id: int, slide: schemas.PresentationSlideInstanceCreate):
+    """Create a new slide instance"""
+    db_slide = models.PresentationSlideInstance(presentation_id=presentation_id, **slide.model_dump())
+    db.add(db_slide)
+    db.commit()
+    db.refresh(db_slide)
+    return db_slide
+
+
+def clear_presentation_slides(db: Session, presentation_id: int):
+    """Clear all slides from a presentation"""
+    db.query(models.PresentationSlideInstance).filter(
+        models.PresentationSlideInstance.presentation_id == presentation_id
+    ).delete()
+    db.commit()
+
+
+def bulk_create_slides(db: Session, presentation_id: int, slides: list):
+    """Bulk create slides for a presentation"""
+    db_slides = []
+    for idx, slide_data in enumerate(slides):
+        slide = models.PresentationSlideInstance(
+            presentation_id=presentation_id,
+            order=idx,
+            slide_type=slide_data["slide_type"],
+            payload=slide_data.get("payload", {}),
+            notes=slide_data.get("notes")
+        )
+        db.add(slide)
+        db_slides.append(slide)
+    db.commit()
+    for s in db_slides:
+        db.refresh(s)
+    return db_slides
