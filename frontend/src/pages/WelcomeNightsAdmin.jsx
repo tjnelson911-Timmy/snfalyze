@@ -49,7 +49,7 @@ function WelcomeNightsAdmin() {
         </NavLink>
         <NavLink to="/admin/welcome-nights/assets" className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}>
           <Image size={16} style={{ marginRight: 6 }} />
-          Assets
+          Logos
         </NavLink>
         <NavLink to="/admin/welcome-nights/templates" className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}>
           <FileBox size={16} style={{ marginRight: 6 }} />
