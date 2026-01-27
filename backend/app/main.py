@@ -1273,6 +1273,152 @@ def delete_facility(facility_id: int, db: Session = Depends(get_db)):
     return {"message": "Deleted"}
 
 
+@app.post("/api/wn/facilities/import")
+async def import_facilities(
+    brand_id: int = Form(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Import facilities from CSV or Excel file.
+    Expected columns: name, city, state, address (optional)
+    """
+    import pandas as pd
+
+    filename = file.filename.lower()
+    content = await file.read()
+
+    try:
+        if filename.endswith('.csv'):
+            df = pd.read_csv(io.BytesIO(content))
+        elif filename.endswith(('.xlsx', '.xls')):
+            df = pd.read_excel(io.BytesIO(content))
+        else:
+            raise HTTPException(400, "Unsupported file type. Please upload CSV or Excel (.xlsx) file.")
+    except Exception as e:
+        raise HTTPException(400, f"Failed to parse file: {str(e)}")
+
+    # Normalize column names
+    df.columns = [c.lower().strip().replace(' ', '_') for c in df.columns]
+
+    if 'name' not in df.columns and 'facility_name' not in df.columns:
+        raise HTTPException(400, "File must contain a 'name' or 'facility_name' column")
+
+    # Map common column variations
+    if 'facility_name' in df.columns and 'name' not in df.columns:
+        df['name'] = df['facility_name']
+
+    created = 0
+    updated = 0
+    errors = []
+
+    for idx, row in df.iterrows():
+        try:
+            name = str(row.get('name', '')).strip()
+            if not name:
+                continue
+
+            facility_data = {
+                'name': name,
+                'city': str(row.get('city', '')).strip() if pd.notna(row.get('city')) else None,
+                'state': str(row.get('state', '')).strip() if pd.notna(row.get('state')) else None,
+                'address': str(row.get('address', '')).strip() if pd.notna(row.get('address')) else None,
+            }
+
+            # Check if facility exists (by name and brand)
+            existing = db.query(models.WNFacility).filter(
+                models.WNFacility.brand_id == brand_id,
+                models.WNFacility.name == name
+            ).first()
+
+            if existing:
+                # Update existing
+                for k, v in facility_data.items():
+                    if v:
+                        setattr(existing, k, v)
+                db.commit()
+                updated += 1
+            else:
+                # Create new
+                new_facility = models.WNFacility(brand_id=brand_id, **facility_data)
+                db.add(new_facility)
+                db.commit()
+                created += 1
+        except Exception as e:
+            errors.append(f"Row {idx + 2}: {str(e)}")
+
+    return {
+        "message": f"Import complete: {created} created, {updated} updated",
+        "created": created,
+        "updated": updated,
+        "errors": errors[:10]  # Return first 10 errors
+    }
+
+
+@app.post("/api/wn/facilities/{facility_id}/logo")
+async def upload_facility_logo(
+    facility_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """Upload a logo for a specific facility"""
+    facility = crud.get_wn_facility(db, facility_id)
+    if not facility:
+        raise HTTPException(404, "Facility not found")
+
+    ext = file.filename.split(".")[-1].lower()
+    if ext not in {"png", "jpg", "jpeg", "gif", "webp"}:
+        raise HTTPException(400, "Invalid file type. Supported: png, jpg, jpeg, gif, webp")
+
+    content = await file.read()
+    fname = f"facility_{facility_id}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.{ext}"
+    file_path = os.path.join(WN_UPLOAD_DIR, fname)
+
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    # Create asset record
+    asset = crud.create_wn_asset(db, schemas.WNAssetCreate(
+        brand_id=facility.brand_id,
+        asset_type="facility_logo",
+        filename=fname,
+        original_filename=file.filename,
+        url=f"/wn_uploads/{fname}",
+        mime_type=file.content_type,
+        file_size=len(content)
+    ))
+
+    # Update facility with logo reference
+    facility.logo_asset_id = asset.id
+    db.commit()
+    db.refresh(facility)
+
+    return {"message": "Logo uploaded", "asset": asset, "facility": facility}
+
+
+@app.delete("/api/wn/facilities/{facility_id}/logo")
+def delete_facility_logo(facility_id: int, db: Session = Depends(get_db)):
+    """Remove logo from a facility"""
+    facility = crud.get_wn_facility(db, facility_id)
+    if not facility:
+        raise HTTPException(404, "Facility not found")
+
+    if facility.logo_asset_id:
+        # Delete the asset file
+        asset = crud.get_wn_asset(db, facility.logo_asset_id)
+        if asset:
+            try:
+                os.remove(os.path.join(WN_UPLOAD_DIR, asset.filename))
+            except:
+                pass
+            crud.delete_wn_asset(db, asset.id)
+
+        facility.logo_asset_id = None
+        db.commit()
+
+    return {"message": "Logo removed"}
+
+
 # Asset endpoints
 @app.get("/api/wn/assets", response_model=List[schemas.WNAssetResponse])
 def get_assets(brand_id: Optional[int] = None, asset_type: Optional[str] = None, db: Session = Depends(get_db)):

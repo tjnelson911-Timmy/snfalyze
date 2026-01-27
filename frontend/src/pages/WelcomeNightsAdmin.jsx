@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Routes, Route, NavLink, useNavigate } from 'react-router-dom'
-import { FileText, Gamepad2, Building2, Image, Plus, Edit2, Trash2, Save, X } from 'lucide-react'
+import { FileText, Gamepad2, Building2, Image, Plus, Edit2, Trash2, Save, X, Upload, Download } from 'lucide-react'
 import {
   getWNBrands,
   getWNContent,
@@ -13,6 +13,9 @@ import {
   createWNFacility,
   updateWNFacility,
   deleteWNFacility,
+  importWNFacilities,
+  uploadFacilityLogo,
+  deleteFacilityLogo,
   getWNAssets,
   uploadWNAsset,
   deleteWNAsset
@@ -329,11 +332,17 @@ function GamesAdmin() {
 function FacilitiesAdmin() {
   const [brands, setBrands] = useState([])
   const [facilities, setFacilities] = useState([])
+  const [assets, setAssets] = useState({})
   const [selectedBrand, setSelectedBrand] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingFacility, setEditingFacility] = useState(null)
-  const [form, setForm] = useState({ name: '', city: '', state: '' })
+  const [form, setForm] = useState({ name: '', city: '', state: '', address: '' })
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState(null)
+  const [uploadingLogo, setUploadingLogo] = useState(null)
+  const importFileRef = useRef(null)
+  const logoFileRefs = useRef({})
 
   useEffect(() => { loadBrands() }, [])
   useEffect(() => { if (selectedBrand) loadFacilities() }, [selectedBrand])
@@ -348,6 +357,11 @@ function FacilitiesAdmin() {
     setLoading(true)
     const data = await getWNFacilities({ brand_id: selectedBrand })
     setFacilities(data)
+    // Load assets to get logo URLs
+    const assetData = await getWNAssets({ brand_id: selectedBrand, asset_type: 'facility_logo' })
+    const assetMap = {}
+    assetData.forEach(a => { assetMap[a.id] = a })
+    setAssets(assetMap)
     setLoading(false)
   }
 
@@ -361,7 +375,7 @@ function FacilitiesAdmin() {
       }
       setShowForm(false)
       setEditingFacility(null)
-      setForm({ name: '', city: '', state: '' })
+      setForm({ name: '', city: '', state: '', address: '' })
       loadFacilities()
     } catch (err) {
       alert('Error saving facility')
@@ -370,7 +384,12 @@ function FacilitiesAdmin() {
 
   const handleEdit = (facility) => {
     setEditingFacility(facility.id)
-    setForm({ name: facility.name, city: facility.city || '', state: facility.state || '' })
+    setForm({
+      name: facility.name,
+      city: facility.city || '',
+      state: facility.state || '',
+      address: facility.address || ''
+    })
     setShowForm(true)
   }
 
@@ -380,16 +399,97 @@ function FacilitiesAdmin() {
     loadFacilities()
   }
 
+  const handleImport = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    setImporting(true)
+    setImportResult(null)
+    try {
+      const result = await importWNFacilities(selectedBrand, file)
+      setImportResult(result)
+      loadFacilities()
+    } catch (err) {
+      setImportResult({ message: 'Import failed: ' + (err.response?.data?.detail || err.message), errors: [] })
+    } finally {
+      setImporting(false)
+      e.target.value = ''
+    }
+  }
+
+  const handleLogoUpload = async (facilityId, e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    setUploadingLogo(facilityId)
+    try {
+      await uploadFacilityLogo(facilityId, file)
+      loadFacilities()
+    } catch (err) {
+      alert('Error uploading logo: ' + (err.response?.data?.detail || err.message))
+    } finally {
+      setUploadingLogo(null)
+      e.target.value = ''
+    }
+  }
+
+  const handleLogoDelete = async (facilityId) => {
+    if (!window.confirm('Remove this logo?')) return
+    try {
+      await deleteFacilityLogo(facilityId)
+      loadFacilities()
+    } catch (err) {
+      alert('Error removing logo')
+    }
+  }
+
+  const downloadTemplate = () => {
+    const csv = 'name,city,state,address\nExample Facility,Portland,OR,123 Main St'
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'facilities_template.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div>
       <div className="wn-filters mb-4">
         <select className="form-select" value={selectedBrand || ''} onChange={(e) => setSelectedBrand(parseInt(e.target.value))}>
           {brands.map(brand => <option key={brand.id} value={brand.id}>{brand.name}</option>)}
         </select>
-        <button className="btn btn-primary btn-sm" onClick={() => { setShowForm(true); setEditingFacility(null); setForm({ name: '', city: '', state: '' }) }}>
+        <button className="btn btn-primary btn-sm" onClick={() => { setShowForm(true); setEditingFacility(null); setForm({ name: '', city: '', state: '', address: '' }) }}>
           <Plus size={16} /> Add Facility
         </button>
+        <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer' }}>
+          <Upload size={16} /> {importing ? 'Importing...' : 'Import CSV/Excel'}
+          <input
+            ref={importFileRef}
+            type="file"
+            accept=".csv,.xlsx,.xls"
+            onChange={handleImport}
+            style={{ display: 'none' }}
+            disabled={importing}
+          />
+        </label>
+        <button className="btn btn-ghost btn-sm" onClick={downloadTemplate} title="Download CSV template">
+          <Download size={16} /> Template
+        </button>
       </div>
+
+      {importResult && (
+        <div className={`alert ${importResult.errors?.length ? 'alert-warning' : 'alert-success'} mb-4`}>
+          <strong>{importResult.message}</strong>
+          {importResult.errors?.length > 0 && (
+            <ul style={{ marginTop: 8, paddingLeft: 20, fontSize: 13 }}>
+              {importResult.errors.map((err, i) => <li key={i}>{err}</li>)}
+            </ul>
+          )}
+          <button className="btn btn-sm btn-ghost" onClick={() => setImportResult(null)} style={{ marginLeft: 'auto' }}>
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       {showForm && (
         <div className="card mb-4">
@@ -408,6 +508,10 @@ function FacilitiesAdmin() {
                 <input className="form-input" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} />
               </div>
             </div>
+            <div className="form-group">
+              <label className="form-label">Address</label>
+              <input className="form-input" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+            </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button type="submit" className="btn btn-primary">{editingFacility ? 'Update' : 'Create'} Facility</button>
               <button type="button" className="btn btn-secondary" onClick={() => { setShowForm(false); setEditingFacility(null) }}>Cancel</button>
@@ -419,11 +523,62 @@ function FacilitiesAdmin() {
       {loading ? <p>Loading...</p> : (
         <table className="data-table">
           <thead>
-            <tr><th>Name</th><th>City</th><th>State</th><th>Actions</th></tr>
+            <tr><th style={{ width: 80 }}>Logo</th><th>Name</th><th>City</th><th>State</th><th>Actions</th></tr>
           </thead>
           <tbody>
             {facilities.map(f => (
               <tr key={f.id}>
+                <td>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {f.logo_asset_id && assets[f.logo_asset_id] ? (
+                      <div style={{ position: 'relative', width: 50, height: 50 }}>
+                        <img
+                          src={assets[f.logo_asset_id].url}
+                          alt={f.name}
+                          style={{ width: 50, height: 50, objectFit: 'contain', borderRadius: 4, background: '#f3f4f6' }}
+                        />
+                        <button
+                          className="btn btn-sm btn-danger"
+                          onClick={() => handleLogoDelete(f.id)}
+                          style={{ position: 'absolute', top: -8, right: -8, padding: 2, minWidth: 20, height: 20 }}
+                          title="Remove logo"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ) : (
+                      <label style={{ cursor: 'pointer' }}>
+                        <div
+                          style={{
+                            width: 50,
+                            height: 50,
+                            borderRadius: 4,
+                            background: '#f3f4f6',
+                            border: '2px dashed #d1d5db',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#9ca3af'
+                          }}
+                          title="Click to upload logo (PNG)"
+                        >
+                          {uploadingLogo === f.id ? (
+                            <div className="animate-spin" style={{ width: 16, height: 16, border: '2px solid #9ca3af', borderTopColor: 'transparent', borderRadius: '50%' }} />
+                          ) : (
+                            <Image size={20} />
+                          )}
+                        </div>
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/gif,image/webp"
+                          onChange={(e) => handleLogoUpload(f.id, e)}
+                          style={{ display: 'none' }}
+                          disabled={uploadingLogo === f.id}
+                        />
+                      </label>
+                    )}
+                  </div>
+                </td>
                 <td><strong>{f.name}</strong></td>
                 <td>{f.city || '-'}</td>
                 <td>{f.state || '-'}</td>
@@ -435,6 +590,9 @@ function FacilitiesAdmin() {
                 </td>
               </tr>
             ))}
+            {facilities.length === 0 && (
+              <tr><td colSpan={5} style={{ textAlign: 'center', color: '#6b7280' }}>No facilities yet. Add one or import from CSV/Excel.</td></tr>
+            )}
           </tbody>
         </table>
       )}

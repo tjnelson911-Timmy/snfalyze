@@ -61,6 +61,18 @@ export const getWNFacility = async (id) => (await api.get('/wn/facilities/' + id
 export const createWNFacility = async (data) => (await api.post('/wn/facilities', data)).data
 export const updateWNFacility = async (id, data) => (await api.put('/wn/facilities/' + id, data)).data
 export const deleteWNFacility = async (id) => (await api.delete('/wn/facilities/' + id)).data
+export const importWNFacilities = async (brandId, file) => {
+  const fd = new FormData()
+  fd.append('brand_id', brandId)
+  fd.append('file', file)
+  return (await api.post('/wn/facilities/import', fd, { headers: { 'Content-Type': 'multipart/form-data' } })).data
+}
+export const uploadFacilityLogo = async (facilityId, file) => {
+  const fd = new FormData()
+  fd.append('file', file)
+  return (await api.post(`/wn/facilities/${facilityId}/logo`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })).data
+}
+export const deleteFacilityLogo = async (facilityId) => (await api.delete(`/wn/facilities/${facilityId}/logo`)).data
 
 // Assets
 export const getWNAssets = async (params = {}) => (await api.get('/wn/assets', { params })).data
