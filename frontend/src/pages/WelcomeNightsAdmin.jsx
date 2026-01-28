@@ -541,7 +541,7 @@ function FacilitiesAdmin() {
                     {f.logo_asset_id && assets[f.logo_asset_id] ? (
                       <div style={{ position: 'relative', width: 50, height: 50 }}>
                         <img
-                          src={assets[f.logo_asset_id].url}
+                          src={`http://localhost:8000${assets[f.logo_asset_id].url}`}
                           alt={f.name}
                           style={{ width: 50, height: 50, objectFit: 'contain', borderRadius: 4, background: '#f3f4f6' }}
                         />
@@ -629,6 +629,8 @@ function AssetsAdmin() {
   const loadAssets = async () => {
     setLoading(true)
     const data = await getWNAssets({ brand_id: selectedBrand })
+    // Sort alphabetically by original filename
+    data.sort((a, b) => (a.original_filename || '').localeCompare(b.original_filename || ''))
     setAssets(data)
     setLoading(false)
   }
@@ -677,7 +679,7 @@ function AssetsAdmin() {
           {assets.map(asset => (
             <div key={asset.id} className="card" style={{ padding: 12 }}>
               <div style={{ aspectRatio: '1', background: '#f3f4f6', borderRadius: 8, marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                <img src={asset.url} alt={asset.original_filename} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                <img src={`http://localhost:8000${asset.url}`} alt={asset.original_filename} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
               </div>
               <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {asset.original_filename}
