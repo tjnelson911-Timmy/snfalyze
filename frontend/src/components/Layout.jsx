@@ -38,18 +38,6 @@ function Layout({ children }) {
                 <span>Current Ops</span>
               </NavLink>
             </li>
-            <li style={{borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: '12px', paddingTop: '12px'}}>
-              <NavLink to="/welcome-nights" className={({isActive}) => isActive ? 'active' : ''}>
-                <Presentation size={18}/>
-                <span>Welcome Nights</span>
-              </NavLink>
-            </li>
-            <li>
-              <NavLink to="/admin/welcome-nights" className={({isActive}) => isActive ? 'active' : ''}>
-                <Settings size={18}/>
-                <span>WN Admin</span>
-              </NavLink>
-            </li>
           </ul>
         </nav>
         <div className="sidebar-footer">
