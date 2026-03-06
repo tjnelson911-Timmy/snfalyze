@@ -104,7 +104,7 @@ function CurrentOps() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv,.xlsx,.xls,.docx,.pdf"
+            accept=".csv,.xlsx,.xls,.doc,.docx,.pdf"
             onChange={handleFileUpload}
             style={{ display: 'none' }}
           />
