@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { Plus, Building2, TrendingUp, RefreshCw, ChevronDown, ChevronRight, Users, Upload, MapPin, Eye, EyeOff } from 'lucide-react'
+import { Plus, Building2, TrendingUp, RefreshCw, ChevronDown, ChevronRight, Users, Upload, MapPin, Eye, EyeOff, MoveRight } from 'lucide-react'
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet'
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
 import { getDeals, getDealStats, updateDealStatus, formatCurrency, formatNumber } from '../services/api'
@@ -162,6 +162,20 @@ function Dashboard() {
       d.id === dealId ? { ...d, status: newStatus } : d
     ))
 
+    try {
+      await updateDealStatus(dealId, newStatus)
+    } catch (err) {
+      console.error('Failed to update status:', err)
+      loadData()
+    }
+  }
+
+  // Manual move deal to a different status
+  const moveDeal = async (e, dealId, newStatus) => {
+    e.stopPropagation() // don't navigate to deal detail
+    setDeals(prev => prev.map(d =>
+      d.id === dealId ? { ...d, status: newStatus } : d
+    ))
     try {
       await updateDealStatus(dealId, newStatus)
     } catch (err) {
@@ -415,6 +429,26 @@ function Dashboard() {
                                   <span className={'priority-badge ' + (deal.priority || 'medium')}>
                                     {deal.priority || 'Medium'}
                                   </span>
+                                  <select
+                                    value=""
+                                    onChange={(e) => moveDeal(e, deal.id, e.target.value)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{
+                                      fontSize: 10,
+                                      padding: '2px 4px',
+                                      border: '1px solid #e5e5e5',
+                                      borderRadius: 4,
+                                      color: '#0b7280',
+                                      background: '#f0fdfa',
+                                      cursor: 'pointer',
+                                      fontWeight: 600
+                                    }}
+                                  >
+                                    <option value="" disabled>Move to →</option>
+                                    {STATUSES.filter(s => s.key !== st.key).map(s => (
+                                      <option key={s.key} value={s.key}>{s.label}</option>
+                                    ))}
+                                  </select>
                                 </div>
                               </div>
                             )}
