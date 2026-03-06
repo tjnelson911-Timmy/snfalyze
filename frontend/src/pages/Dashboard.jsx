@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { Plus, Building2, TrendingUp, RefreshCw, ChevronDown, ChevronRight, Users, Upload, MapPin, Eye, EyeOff } from 'lucide-react'
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet'
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
 import { getDeals, getDealStats, updateDealStatus, formatCurrency, formatNumber } from '../services/api'
 import api from '../services/api'
 
@@ -33,8 +34,6 @@ function Dashboard() {
   const [expandedCompanies, setExpandedCompanies] = useState(new Set())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [draggedDeal, setDraggedDeal] = useState(null)
-  const [dragOverColumn, setDragOverColumn] = useState(null)
   const [mapFilters, setMapFilters] = useState({ showAll: true, companies: {}, deals: {} })
   const navigate = useNavigate()
 
@@ -150,58 +149,25 @@ function Dashboard() {
     return markers
   }, [currentOps, mapDeals, mapFilters])
 
-  // Drag handlers for deals
-  const handleDragStart = (e, deal) => {
-    setDraggedDeal(deal)
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', deal.id)
-    // Add dragging class after a brief delay for visual feedback
-    setTimeout(() => {
-      e.target.style.opacity = '0.5'
-    }, 0)
-  }
+  // Drag-and-drop handler
+  const onDragEnd = async (result) => {
+    const { draggableId, destination, source } = result
+    if (!destination || destination.droppableId === source.droppableId) return
 
-  const handleDragEnd = (e) => {
-    e.target.style.opacity = '1'
-    setDraggedDeal(null)
-    setDragOverColumn(null)
-  }
-
-  const handleDragOver = (e, statusKey) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-    if (dragOverColumn !== statusKey) {
-      setDragOverColumn(statusKey)
-    }
-  }
-
-  const handleDragLeave = (e) => {
-    // Only clear if leaving the column entirely
-    if (!e.currentTarget.contains(e.relatedTarget)) {
-      setDragOverColumn(null)
-    }
-  }
-
-  const handleDrop = async (e, newStatus) => {
-    e.preventDefault()
-    setDragOverColumn(null)
-
-    if (!draggedDeal || draggedDeal.status === newStatus) return
+    const dealId = parseInt(draggableId)
+    const newStatus = destination.droppableId
 
     // Optimistically update UI
     setDeals(prev => prev.map(d =>
-      d.id === draggedDeal.id ? { ...d, status: newStatus } : d
+      d.id === dealId ? { ...d, status: newStatus } : d
     ))
 
     try {
-      await updateDealStatus(draggedDeal.id, newStatus)
+      await updateDealStatus(dealId, newStatus)
     } catch (err) {
       console.error('Failed to update status:', err)
-      // Revert on error
       loadData()
     }
-
-    setDraggedDeal(null)
   }
 
   if (loading) {
@@ -269,73 +235,23 @@ function Dashboard() {
       </div>
 
       {/* Pipeline Board */}
-      <div className="pipeline-board">
-        {STATUSES.map(st => {
-          const columnDeals = deals.filter(d => d.status === st.key)
-          const isOver = dragOverColumn === st.key && draggedDeal?.status !== st.key
-          const isCurrentOpsColumn = st.key === 'current_operations'
+      <DragDropContext onDragEnd={onDragEnd}>
+        <div className="pipeline-board">
+          {STATUSES.map(st => {
+            const columnDeals = deals.filter(d => d.status === st.key)
+            const isCurrentOpsColumn = st.key === 'current_operations'
 
-          return (
-            <div
-              key={st.key}
-              className="pipeline-column"
-              onDragOver={(e) => handleDragOver(e, st.key)}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDrop(e, st.key)}
-              style={{
-                background: isOver ? '#f0fdfa' : 'white',
-                borderColor: isOver ? '#0b7280' : undefined,
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <div className="column-header" style={{ background: isOver ? '#e6fffa' : undefined }}>
-                <span className="column-title">{st.label}</span>
-                <span className="column-count">
-                  {isCurrentOpsColumn ? currentOps.total : columnDeals.length}
-                </span>
-              </div>
-              <div className="column-cards">
-                {/* Regular deals for non-current-ops columns */}
-                {!isCurrentOpsColumn && columnDeals.map(deal => (
-                  <div
-                    key={deal.id}
-                    className="deal-card"
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, deal)}
-                    onDragEnd={handleDragEnd}
-                    onClick={() => navigate('/deals/' + deal.id)}
-                    style={{ cursor: 'grab' }}
-                  >
-                    <div className="deal-card-header">
-                      <span className="deal-name">{deal.name}</span>
-                      <span className={'deal-type-badge ' + (deal.deal_type || 'snf').toLowerCase()}>
-                        {deal.deal_type || 'SNF'}
-                      </span>
-                    </div>
-                    {(deal.total_beds > 0 || deal.property_count > 1) && (
-                      <div className="deal-meta">
-                        {deal.total_beds > 0 && (
-                          <span><Building2 size={12} /> {deal.total_beds} beds</span>
-                        )}
-                        {deal.property_count > 1 && (
-                          <span>{deal.property_count} properties</span>
-                        )}
-                      </div>
-                    )}
-                    {deal.asking_price > 0 && (
-                      <div className="deal-price">{formatCurrency(deal.asking_price)}</div>
-                    )}
-                    <div className="deal-footer">
-                      <span className={'priority-badge ' + (deal.priority || 'medium')}>
-                        {deal.priority || 'Medium'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+            return (
+              <div key={st.key} className="pipeline-column">
+                <div className="column-header">
+                  <span className="column-title">{st.label}</span>
+                  <span className="column-count">
+                    {isCurrentOpsColumn ? currentOps.total : columnDeals.length}
+                  </span>
+                </div>
 
-                {/* Current Operations content */}
-                {isCurrentOpsColumn && (
-                  <>
+                {isCurrentOpsColumn ? (
+                  <div className="column-cards">
                     {currentOps.companies.map(company => {
                       const isExpanded = expandedCompanies.has(company.company)
                       const teamNames = Object.keys(company.teams)
@@ -446,44 +362,101 @@ function Dashboard() {
                         </Link>
                       </div>
                     )}
-                  </>
-                )}
-
-                {/* Empty state for non-current-ops columns */}
-                {!isCurrentOpsColumn && columnDeals.length === 0 && (
-                  <div style={{
-                    padding: 16,
-                    textAlign: 'center',
-                    color: isOver ? '#0b7280' : '#a3a3a3',
-                    fontSize: 12,
-                    border: isOver ? '2px dashed #0b7280' : '2px dashed transparent',
-                    borderRadius: 6,
-                    margin: 4,
-                    transition: 'all 0.15s'
-                  }}>
-                    {isOver ? 'Drop here' : 'No deals'}
                   </div>
-                )}
-                {/* Drop zone indicator when column has deals */}
-                {!isCurrentOpsColumn && columnDeals.length > 0 && isOver && (
-                  <div style={{
-                    padding: 12,
-                    textAlign: 'center',
-                    color: '#0b7280',
-                    fontSize: 12,
-                    border: '2px dashed #0b7280',
-                    borderRadius: 6,
-                    margin: 4,
-                    background: '#f0fdfa'
-                  }}>
-                    Drop here
-                  </div>
+                ) : (
+                  <Droppable droppableId={st.key}>
+                    {(provided, snapshot) => (
+                      <div
+                        ref={provided.innerRef}
+                        {...provided.droppableProps}
+                        className="column-cards"
+                        style={{
+                          background: snapshot.isDraggingOver ? '#f0fdfa' : undefined,
+                          transition: 'background 0.15s ease',
+                          minHeight: 100
+                        }}
+                      >
+                        {columnDeals.map((deal, index) => (
+                          <Draggable key={deal.id} draggableId={String(deal.id)} index={index}>
+                            {(provided, snapshot) => (
+                              <div
+                                ref={provided.innerRef}
+                                {...provided.draggableProps}
+                                {...provided.dragHandleProps}
+                                className="deal-card"
+                                onClick={() => navigate('/deals/' + deal.id)}
+                                style={{
+                                  ...provided.draggableProps.style,
+                                  cursor: 'grab',
+                                  opacity: snapshot.isDragging ? 0.8 : 1,
+                                  boxShadow: snapshot.isDragging ? '0 8px 16px rgba(0,0,0,0.15)' : undefined
+                                }}
+                              >
+                                <div className="deal-card-header">
+                                  <span className="deal-name">{deal.name}</span>
+                                  <span className={'deal-type-badge ' + (deal.deal_type || 'snf').toLowerCase()}>
+                                    {deal.deal_type || 'SNF'}
+                                  </span>
+                                </div>
+                                {(deal.total_beds > 0 || deal.property_count > 1) && (
+                                  <div className="deal-meta">
+                                    {deal.total_beds > 0 && (
+                                      <span><Building2 size={12} /> {deal.total_beds} beds</span>
+                                    )}
+                                    {deal.property_count > 1 && (
+                                      <span>{deal.property_count} properties</span>
+                                    )}
+                                  </div>
+                                )}
+                                {deal.asking_price > 0 && (
+                                  <div className="deal-price">{formatCurrency(deal.asking_price)}</div>
+                                )}
+                                <div className="deal-footer">
+                                  <span className={'priority-badge ' + (deal.priority || 'medium')}>
+                                    {deal.priority || 'Medium'}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                          </Draggable>
+                        ))}
+                        {provided.placeholder}
+                        {columnDeals.length === 0 && !snapshot.isDraggingOver && (
+                          <div style={{
+                            padding: 16,
+                            textAlign: 'center',
+                            color: '#a3a3a3',
+                            fontSize: 12,
+                            border: '2px dashed transparent',
+                            borderRadius: 6,
+                            margin: 4
+                          }}>
+                            No deals
+                          </div>
+                        )}
+                        {snapshot.isDraggingOver && columnDeals.length === 0 && (
+                          <div style={{
+                            padding: 12,
+                            textAlign: 'center',
+                            color: '#0b7280',
+                            fontSize: 12,
+                            border: '2px dashed #0b7280',
+                            borderRadius: 6,
+                            margin: 4,
+                            background: '#f0fdfa'
+                          }}>
+                            Drop here
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </Droppable>
                 )}
               </div>
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
+      </DragDropContext>
 
       {/* Map Section */}
       <div style={{ marginTop: 24, display: 'flex', gap: 16 }}>
