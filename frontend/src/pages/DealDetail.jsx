@@ -953,7 +953,17 @@ function Docs({ deal, onRefresh, confirm }) {
                                   style={{ padding: '4px 8px', fontSize: 13, fontWeight: 600 }}
                                 />
                               ) : (
-                                <div style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.original_filename}</div>
+                                <a
+                                  href={'/uploads/' + doc.filename}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', color: '#0b7280', textDecoration: 'none' }}
+                                  onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
+                                  onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
+                                >
+                                  {doc.original_filename}
+                                </a>
                               )}
                               <div style={{ display: 'flex', gap: 8, fontSize: 11, color: '#737373', marginTop: 2 }}>
                                 <span style={{ background: 'white', padding: '1px 6px', borderRadius: 3 }}>{doc.file_type.toUpperCase()}</span>
